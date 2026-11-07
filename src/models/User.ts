@@ -21,6 +21,12 @@ export class User extends Model {
   static {
     this.init(
       {
+        id: {
+          type: DataTypes.INTEGER.UNSIGNED,
+          autoIncrement: true,
+          primaryKey: true,
+        },
+
         fullname: {
           type: DataTypes.STRING,
           allowNull: false,

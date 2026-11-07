@@ -1,9 +1,8 @@
-import type { RequestHandler } from 'express';
-import type { GroupOptions, HttpMethod, RouteDefinition, RouteHandler } from './types.js';
+import type { GroupOptions, HttpMethod, MiddlewareLike, RouteDefinition, RouteHandler } from './types.js';
 
 interface GroupContext {
   prefix: string;
-  middleware: RequestHandler[];
+  middleware: MiddlewareLike[];
   as: string;
 }
 
@@ -29,6 +28,7 @@ export class RouteRegistry {
       handler,
       middleware: [...ctx.middleware],
       namePrefix: ctx.as,
+      constraints: {},
     };
     this.routes.push(definition);
     return definition;
@@ -47,6 +47,23 @@ export class RouteRegistry {
       callback();
     } finally {
       this.stack.pop();
+    }
+  }
+
+  static assertValid(): void {
+    const seen = new Map<string, RouteDefinition>();
+    const clashes: string[] = [];
+
+    for (const route of this.routes) {
+      for (const method of route.methods) {
+        const key = `${method.toUpperCase()} ${route.uri}`;
+        if (seen.has(key)) clashes.push(key);
+        seen.set(key, route);
+      }
+    }
+
+    if (clashes.length) {
+      throw new Error(`Duplicate routes declared: ${[...new Set(clashes)].join(', ')}`);
     }
   }
 

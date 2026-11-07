@@ -100,6 +100,11 @@ export class Blueprint {
     return this.add(name, DataTypes.INTEGER, { primaryKey: true, autoIncrement: true });
   }
 
+  /** Auto-incrementing unsigned INTEGER primary key. */
+  unsignedId(name = 'id'): ColumnBuilder {
+    return this.add(name, DataTypes.INTEGER.UNSIGNED, { primaryKey: true, autoIncrement: true });
+  }
+
   /** Auto-incrementing BIGINT primary key (pair it with foreignBigId). */
   bigId(name = 'id'): ColumnBuilder {
     return this.add(name, DataTypes.BIGINT, { primaryKey: true, autoIncrement: true });
@@ -108,6 +113,11 @@ export class Blueprint {
   /** Foreign key column matching id(). Chain .constrained() to add the FOREIGN KEY. */
   foreignId(name: string): ColumnBuilder {
     return this.add(name, DataTypes.INTEGER);
+  }
+
+  /** Foreign key column matching unsignedId(). */
+  foreignUnsignedId(name: string): ColumnBuilder {
+    return this.add(name, DataTypes.INTEGER.UNSIGNED);
   }
 
   foreignBigId(name: string): ColumnBuilder {
