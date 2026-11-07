@@ -12,8 +12,8 @@ export class Application {
   readonly express: Express = express();
 
   private readonly providers: ServiceProvider[] = [];
-  private booting?: Promise<Express>;
-  private server?: Server;
+  private booting: Promise<Express> | undefined;
+  private server: Server | undefined;
 
   static create(...providers: ProviderClass[]): Application {
     return new Application().register(...providers);

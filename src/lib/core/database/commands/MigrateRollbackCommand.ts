@@ -23,7 +23,7 @@ export class MigrateRollbackCommand extends DatabaseCommand {
     const migrator = new Migrator(Database.connection(), { onEvent: (e) => reportEvent(this.io, e) });
 
     this.title('Rolling back migrations');
-    const reverted = await migrator.rollback({ steps });
+    const reverted = await migrator.rollback({ ...(steps !== undefined ? { steps } : {}) });
 
     if (!reverted.length) {
       this.info('Nothing to roll back.');

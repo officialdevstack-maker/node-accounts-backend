@@ -3,6 +3,7 @@ declare global {
     interface Request {
       user?: any
       auth?: any
+      validated?: Record<string, any>
     }
   }
 }

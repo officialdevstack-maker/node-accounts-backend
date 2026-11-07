@@ -13,7 +13,11 @@ export class WelcomeNotification extends Notification {
   }
 
   toMail(notifiable: Notifiable) {
-    return new WelcomeMail({ name: this.name, email: notifiable.email ?? '' });
+    return new WelcomeMail({
+      name: this.name,
+      email: notifiable.email ?? '',
+      id: notifiable.id,
+    } as any);
   }
   
 

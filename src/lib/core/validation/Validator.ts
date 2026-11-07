@@ -37,8 +37,10 @@ function parseRules(definition: string | RuleDefinition[]): ParsedRule[] {
 
       const params =
         raw === "" ? [] : REGEX_RULES.has(name) ? [raw] : raw.split(",").map((s) => s.trim());
+      const spec = ruleRegistry[name];
+      if (!spec) throw new Error(`Validation rule "${name}" does not exist.`);
 
-      parsed.push({ name, params, ...ruleRegistry[name] });
+      parsed.push({ ...spec, name, params });
     } else if (typeof item === "function") {
       parsed.push({
         name: "custom",
@@ -251,28 +253,30 @@ export class Validator {
 
     const p = rule.params;
     const replace: Record<string, string> = { attribute: this.displayName(attribute) };
+    const first = p[0] ?? "";
+    const second = p[1] ?? "";
 
     switch (rule.name) {
       case "min":
       case "max":
       case "between":
       case "digits_between":
-        replace.min = p[0];
-        replace.max = rule.name === "max" ? p[0] : p[1];
+        replace.min = first;
+        replace.max = rule.name === "max" ? first : second;
         break;
       case "size":
-        replace.size = p[0];
+        replace.size = first;
         break;
       case "digits":
-        replace.digits = p[0];
+        replace.digits = first;
         break;
       case "same":
       case "different":
-        replace.other = this.displayName(p[0]);
+        replace.other = this.displayName(first);
         break;
       case "required_if":
       case "required_unless":
-        replace.other = this.displayName(p[0]);
+        replace.other = this.displayName(first);
         replace.value = p.slice(1).join(", ");
         break;
       case "required_with":
@@ -289,7 +293,7 @@ export class Validator {
       case "after_or_equal":
       case "before":
       case "before_or_equal":
-        replace.date = this.displayName(p[0]);
+        replace.date = this.displayName(first);
         break;
     }
 

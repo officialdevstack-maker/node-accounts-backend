@@ -6,10 +6,10 @@ import { migrationTimestamp, toSnake } from '../support.js';
 /** create_users_table -> create users ; add_phone_to_users_table -> alter users ; anything else -> blank */
 export function inferMigration(name: string): { kind: MigrationKind; table?: string } {
   const create = name.match(/^create_(.+?)(?:_table)?$/);
-  if (create) return { kind: 'create', table: create[1] };
+  if (create) return { kind: 'create', ...(create[1] ? { table: create[1] } : {}) };
 
   const alter = name.match(/^(?:add|drop|remove|alter|update|change|modify|rename)_.+?_(?:to|from|in|on)_(.+?)(?:_table)?$/);
-  if (alter) return { kind: 'alter', table: alter[1] };
+  if (alter) return { kind: 'alter', ...(alter[1] ? { table: alter[1] } : {}) };
 
   return { kind: 'blank' };
 }

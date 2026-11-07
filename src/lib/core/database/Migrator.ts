@@ -55,7 +55,7 @@ export class Migrator {
   private readonly dir: string;
   private readonly record: ModelStatic<Model>;
   private readonly schema: Schema;
-  private readonly onEvent?: (event: MigratorEvent) => void;
+  private readonly onEvent: ((event: MigratorEvent) => void) | undefined;
 
   constructor(
     sequelize: Sequelize,
@@ -111,7 +111,10 @@ export class Migrator {
   async status(): Promise<MigrationStatus[]> {
     const batches = new Map((await this.ran()).map((r) => [r.name, r.batch]));
     const files = await this.files();
-    const rows: MigrationStatus[] = files.map((f) => ({ name: f.name, ran: batches.has(f.name), batch: batches.get(f.name) }));
+    const rows: MigrationStatus[] = files.map((f) => {
+      const batch = batches.get(f.name);
+      return { name: f.name, ran: batches.has(f.name), ...(batch !== undefined ? { batch } : {}) };
+    });
 
     // Recorded as run but the file is gone: surface it instead of hiding it.
     const known = new Set(files.map((f) => f.name));

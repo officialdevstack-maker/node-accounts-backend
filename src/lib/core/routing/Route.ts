@@ -64,6 +64,17 @@ export const Route = {
   /** Respond to GET, POST, PUT, PATCH and DELETE. */
   any: (uri: string, handler: RouteHandler) => new PendingRoute(RouteRegistry.add(ALL_METHODS, uri, handler)),
 
+  /** Route.prefix('/api').group(() => { ... }) */
+  prefix: (prefix: string) => ({
+    group: (callback: () => void): void => RouteRegistry.group({ prefix }, callback),
+    middleware: (...middleware: RequestHandler[]) => ({
+      group: (callback: () => void): void => RouteRegistry.group({ prefix, middleware }, callback),
+    }),
+    as: (as: string) => ({
+      group: (callback: () => void): void => RouteRegistry.group({ prefix, as }, callback),
+    }),
+  }),
+
   /** Route.group({ prefix: '/auth', middleware: [authMiddleware], as: 'auth.' }, () => { ... }) */
   group: (options: GroupOptions, callback: () => void): void => RouteRegistry.group(options, callback),
 

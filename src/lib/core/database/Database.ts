@@ -20,7 +20,7 @@ type AssociableModel = ModelStatic<Model> & {
 };
 
 export class Database {
-  private static sequelize?: Sequelize;
+  private static sequelize: Sequelize | undefined;
   private static booted = false;
   private static readonly initialized = new Set<ModelInitializer>();
   private static readonly associated = new Set<string>();

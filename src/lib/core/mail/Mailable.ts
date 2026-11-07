@@ -38,7 +38,7 @@ export abstract class Mailable {
   }
 
   from(address: string, name?: string): this {
-    this._from = { address, name };
+    this._from = { address, ...(name ? { name } : {}) };
     return this;
   }
 

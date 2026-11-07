@@ -35,12 +35,13 @@ export function setByPath(obj: Data, path: string, value: unknown): void {
 
   let cur: any = obj;
   segs.forEach((seg, i) => {
+    const next = segs[i + 1];
     if (i === segs.length - 1) {
       cur[seg] = value;
       return;
     }
     if (cur[seg] === undefined || cur[seg] === null || typeof cur[seg] !== "object") {
-      cur[seg] = /^\d+$/.test(segs[i + 1]) ? [] : {};
+      cur[seg] = next !== undefined && /^\d+$/.test(next) ? [] : {};
     }
     cur = cur[seg];
   });

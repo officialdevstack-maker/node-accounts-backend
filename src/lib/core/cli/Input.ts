@@ -61,14 +61,19 @@ export function parseSignature(signature: string): SignatureDef {
 
       const eq = body.indexOf('=');
       if (eq === -1) {
-        def.options.push({ name: body, shortcut, description, takesValue: false });
+        def.options.push({
+          name: body,
+          ...(shortcut ? { shortcut } : {}),
+          description,
+          takesValue: false,
+        });
       } else {
         def.options.push({
           name: body.slice(0, eq),
-          shortcut,
+          ...(shortcut ? { shortcut } : {}),
           description,
           takesValue: true,
-          default: body.slice(eq + 1) || undefined,
+          ...(body.slice(eq + 1) ? { default: body.slice(eq + 1) } : {}),
         });
       }
       continue;
@@ -91,7 +96,12 @@ export function parseSignature(signature: string): SignatureDef {
     if (required && def.arguments.some((a) => !a.required)) {
       throw new Error(`Invalid signature "${def.name}": required argument {${name}} cannot follow an optional one.`);
     }
-    def.arguments.push({ name, description, required, default: fallback });
+    def.arguments.push({
+      name,
+      description,
+      required,
+      ...(fallback !== undefined ? { default: fallback } : {}),
+    });
   }
 
   return def;

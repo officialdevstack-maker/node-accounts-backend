@@ -185,11 +185,19 @@ export class Blueprint {
 
   // ---- indexes ----------------------------------------------------------------------------
   index(fields: string | string[], options: { name?: string } = {}): void {
-    this.indexes.push({ fields: [fields].flat(), unique: false, name: options.name });
+    this.indexes.push({
+      fields: [fields].flat(),
+      unique: false,
+      ...(options.name ? { name: options.name } : {}),
+    });
   }
 
   /** Composite unique constraint: t.unique(['user_id', 'wallet_id']). For one column use .unique() on it. */
   unique(fields: string | string[], options: { name?: string } = {}): void {
-    this.indexes.push({ fields: [fields].flat(), unique: true, name: options.name });
+    this.indexes.push({
+      fields: [fields].flat(),
+      unique: true,
+      ...(options.name ? { name: options.name } : {}),
+    });
   }
 }

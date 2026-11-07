@@ -74,7 +74,7 @@ export class Kernel {
 
     this.packEntries.set(pack.name, {
       pack,
-      source,
+      ...(source ? { source } : {}),
       commands: instances.map((c) => c.name).sort(),
       overrides,
     });
