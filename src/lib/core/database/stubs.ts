@@ -1,5 +1,5 @@
 // database/stubs.ts
-// File templates for make:migration / make:model / make:seeder.
+// File templates for make:migration / make:seeder.
 
 export type MigrationKind = 'create' | 'alter' | 'blank';
 
@@ -61,48 +61,9 @@ import { Seeder } from '../Seeder.js';
 
 export class ${cls} extends Seeder {
   async run(): Promise<void> {
-    // await User.bulkCreate([{ name: 'Ada' }]);
+    // await this.db.table('users').insert([{ fullname: 'Ada Obi' }]);
     // await this.call(OtherSeeder);
   }
-}
-`;
-}
-
-export function modelStub(cls: string, table: string): string {
-  return `// database/models/${cls}.ts
-// Loaded automatically by Database.boot(): it calls init${cls}(sequelize) for every file in database/models/.
-import {
-  DataTypes,
-  Model,
-  type CreationOptional,
-  type InferAttributes,
-  type InferCreationAttributes,
-  type ModelStatic,
-  type Sequelize,
-} from 'sequelize';
-
-export class ${cls} extends Model<InferAttributes<${cls}>, InferCreationAttributes<${cls}>> {
-  declare id: CreationOptional<number>;
-  declare createdAt: CreationOptional<Date>;
-  declare updatedAt: CreationOptional<Date>;
-
-  /** Called once every model exists. Define relations here: this.hasMany(models.Wallet!) */
-  static associate(_models: Record<string, ModelStatic<Model>>): void {
-    //
-  }
-}
-
-export function init${cls}(sequelize: Sequelize) {
-  ${cls}.init(
-    {
-      id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-      createdAt: DataTypes.DATE,
-      updatedAt: DataTypes.DATE,
-    },
-    { sequelize, tableName: '${table}', underscored: true, timestamps: true },
-  );
-
-  return ${cls};
 }
 `;
 }

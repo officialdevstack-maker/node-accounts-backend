@@ -1,5 +1,4 @@
 // database/commands/DbSeedCommand.ts
-import { Database } from '../Database.js';
 import { loadSeeder } from '../Seeder.js';
 import { DatabaseCommand } from './DatabaseCommand.js';
 
@@ -14,7 +13,6 @@ export class DbSeedCommand extends DatabaseCommand {
     const name = this.option('class')!;
     const Seeder = await loadSeeder(name);
 
-    await Database.boot(); // models in database/models are usable inside seeders
     this.comment(`Seeding: ${name}`);
     await new Seeder().run();
 

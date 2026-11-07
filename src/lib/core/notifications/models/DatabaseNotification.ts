@@ -1,77 +1,67 @@
-// notifications/models/DatabaseNotification.ts
-// Sequelize model behind the "database" channel (like Laravel's notifications table).
-// Call initDatabaseNotification(sequelize) once at boot, before sending any database notification.
-import {
-  DataTypes,
-  Model,
-  Op,
-  type CreationOptional,
-  type InferAttributes,
-  type InferCreationAttributes,
-  type Sequelize,
-} from 'sequelize';
+import { DB, type Row } from '../../query/index.js';
 
-export class DatabaseNotification extends Model<
-  InferAttributes<DatabaseNotification>,
-  InferCreationAttributes<DatabaseNotification>
-> {
-  declare id: string;
-  declare type: string;
-  declare notifiableId: string;
-  declare data: Record<string, unknown>;
-  declare readAt: CreationOptional<Date | null>;
-  declare createdAt: CreationOptional<Date>;
-  declare updatedAt: CreationOptional<Date>;
+const TABLE = 'notifications';
 
-  static async forNotifiable(notifiableId: string | number, options: { unreadOnly?: boolean; limit?: number } = {}) {
-    return this.findAll({
-      where: {
-        notifiableId: String(notifiableId),
-        ...(options.unreadOnly ? { readAt: { [Op.is]: null } } : {}),
-      },
-      order: [['createdAt', 'DESC']],
-      limit: options.limit ?? 50,
+export interface DatabaseNotificationRecord {
+  id: string;
+  type: string;
+  notifiableId: string;
+  data: Record<string, unknown>;
+  readAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const hydrate = (row: Row): DatabaseNotificationRecord => ({
+  id: row.id,
+  type: row.type,
+  notifiableId: row.notifiable_id,
+  data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data,
+  readAt: row.read_at ?? null,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+export const DatabaseNotification = {
+  async create(input: { id: string; type: string; notifiableId: string; data: Record<string, unknown> }): Promise<void> {
+    const now = new Date();
+    await DB.table(TABLE).insert({
+      id: input.id,
+      type: input.type,
+      notifiable_id: input.notifiableId,
+      data: input.data,
+      read_at: null,
+      created_at: now,
+      updated_at: now,
     });
-  }
+  },
 
-  static async unreadCount(notifiableId: string | number): Promise<number> {
-    return this.count({ where: { notifiableId: String(notifiableId), readAt: { [Op.is]: null } } });
-  }
+  async forNotifiable(notifiableId: string | number, options: { unreadOnly?: boolean; limit?: number } = {}) {
+    const rows = await DB.table(TABLE)
+      .where('notifiable_id', String(notifiableId))
+      .when(options.unreadOnly, (q) => q.whereNull('read_at'))
+      .orderByDesc('created_at')
+      .limit(options.limit ?? 50)
+      .get();
+    return rows.map(hydrate);
+  },
 
-  static async markAsRead(id: string, notifiableId: string | number): Promise<void> {
-    await this.update(
-      { readAt: new Date() },
-      { where: { id, notifiableId: String(notifiableId), readAt: { [Op.is]: null } } },
-    );
-  }
+  unreadCount(notifiableId: string | number): Promise<number> {
+    return DB.table(TABLE).where('notifiable_id', String(notifiableId)).whereNull('read_at').count();
+  },
 
-  static async markAllAsRead(notifiableId: string | number): Promise<void> {
-    await this.update(
-      { readAt: new Date() },
-      { where: { notifiableId: String(notifiableId), readAt: { [Op.is]: null } } },
-    );
-  }
-}
+  async markAsRead(id: string, notifiableId: string | number): Promise<void> {
+    await DB.table(TABLE)
+      .where('id', id)
+      .where('notifiable_id', String(notifiableId))
+      .whereNull('read_at')
+      .update({ read_at: new Date(), updated_at: new Date() });
+  },
 
-export function initDatabaseNotification(sequelize: Sequelize) {
-  DatabaseNotification.init(
-    {
-      id: { type: DataTypes.UUID, primaryKey: true },
-      type: { type: DataTypes.STRING(120), allowNull: false },
-      notifiableId: { type: DataTypes.STRING(64), allowNull: false },
-      data: { type: DataTypes.JSON, allowNull: false },
-      readAt: { type: DataTypes.DATE, allowNull: true, defaultValue: null },
-      createdAt: DataTypes.DATE,
-      updatedAt: DataTypes.DATE,
-    },
-    {
-      sequelize,
-      tableName: 'notifications',
-      underscored: true,
-      timestamps: true,
-      indexes: [{ fields: ['notifiable_id', 'read_at'] }],
-    },
-  );
-
-  return DatabaseNotification;
-}
+  async markAllAsRead(notifiableId: string | number): Promise<void> {
+    await DB.table(TABLE)
+      .where('notifiable_id', String(notifiableId))
+      .whereNull('read_at')
+      .update({ read_at: new Date(), updated_at: new Date() });
+  },
+};

@@ -8,20 +8,15 @@ export class DbVerifyCommand extends DatabaseCommand {
   readonly description = 'Check the database connection and credentials';
 
   async handle(): Promise<number> {
-    const driver = config('database.default');
-    const target =
-      driver === 'sqlite'
-        ? config('database.storage')
-        : `${config('database.host')}:${config('database.port')}/${config('database.name')} as ${config('database.username')}`;
-
-    this.comment(`Connecting to ${driver} (${target}) ...`);
+    const target = `${config('database.host')}:${config('database.port')}/${config('database.name')} as ${config('database.username')}`;
+    this.comment(`Connecting to mysql (${target}) ...`);
 
     try {
       await Database.authenticate();
-      this.success(`Database [${driver}] is ready.`);
+      this.success('Database is ready.');
       return 0;
     } catch (error) {
-      this.error(`Database [${driver}] failed: ${error instanceof Error ? error.message : String(error)}`);
+      this.error(`Database failed: ${error instanceof Error ? error.message : String(error)}`);
       return 1;
     }
   }

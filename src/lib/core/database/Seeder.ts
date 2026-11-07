@@ -1,7 +1,7 @@
 // database/Seeder.ts
 // Base class for files in database/seeders/. Generate one with:  artisan make:seeder UserSeeder
 import { pathToFileURL } from 'node:url';
-import type { Sequelize } from 'sequelize';
+import type { Connection } from '../query/Connection.js';
 import { Database } from './Database.js';
 import { databasePath } from './paths.js';
 
@@ -11,7 +11,7 @@ export abstract class Seeder {
   abstract run(): Promise<void> | void;
 
   /** The shared connection, for queries that don't go through a model. */
-  protected get db(): Sequelize {
+  protected get db(): Connection {
     return Database.connection();
   }
 

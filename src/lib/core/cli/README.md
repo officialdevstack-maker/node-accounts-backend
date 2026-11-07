@@ -32,7 +32,7 @@ npm run artisan -- make:mail invoice
 | `make:pack <name> [--description=] [--force]` | New pack folder (`pack.ts` + `commands/`), found automatically |
 | `pack:list` | Registered packs and the commands each one adds |
 
-Packs can add more (the `database/` pack adds `migrate`, `migrate:rollback`, `make:model`, `db:seed` ...). Run `list` to see everything.
+Packs can add more (the `database/` pack adds `migrate`, `migrate:rollback`, `make:migration`, `db:seed` ...). Run `list` to see everything.
 
 The generators add the new class to your `mail/index.ts` / `notifications/index.ts` barrel,
 append the `Mail` / `Notification` suffix if you leave it off (`wallet-debited` -> `WalletDebitedNotification`),

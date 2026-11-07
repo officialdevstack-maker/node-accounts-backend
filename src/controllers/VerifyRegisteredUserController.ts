@@ -8,7 +8,7 @@ class VerifyRegisteredUserController {
 
     async create(req:Request, res:Response) {
         const { email } = req.body as { email?: string }
-        const user = await User.findOne({ where: { email } })
+        const user = await User.findByEmail(String(email ?? ''))
 
         if (!user) {
             return res.status(404).json({ message: 'User not found.' })

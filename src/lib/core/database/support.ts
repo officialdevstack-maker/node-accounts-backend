@@ -1,4 +1,5 @@
 // database/support.ts
+import { Raw } from '../query/Raw.js';
 
 /** 'user' -> 'users', 'category' -> 'categories', 'address' -> 'addresses', 'user_profile' -> 'user_profiles' */
 export function pluralize(word: string): string {
@@ -24,4 +25,15 @@ export function migrationTimestamp(date = new Date()): string {
     pad(date.getUTCDate()),
     `${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}`,
   ].join('_');
+}
+
+export const quoteId = (name: string): string => `\`${name.replaceAll('`', '``')}\``;
+
+/** For DDL defaults only. Query values always go through bindings. */
+export function quoteValue(value: unknown): string {
+  if (value === null || value === undefined) return 'NULL';
+  if (value instanceof Raw) return value.value;
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'boolean') return value ? '1' : '0';
+  return `'${String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 }

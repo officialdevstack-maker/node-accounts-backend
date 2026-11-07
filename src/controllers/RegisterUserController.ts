@@ -27,7 +27,12 @@ class RegisterUserController {
 
         const data = v.validated()
 
-        const user = await User.create(data)
+        const user = await User.create({
+            fullname: data.fullname,
+            email: data.email,
+            phone: data.phone,
+            password: data.password,
+        })
         const auth = await Auth.login(user)
 
         const token = Auth.token()
@@ -35,7 +40,7 @@ class RegisterUserController {
         
 
 
-        return res.json({ data: {auth, token, data, user}, message: "successfully registered" });
+        return res.json({ data: {auth, token, user}, message: "successfully registered" });
     }
 
 

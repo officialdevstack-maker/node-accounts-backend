@@ -1,18 +1,14 @@
-// config/database.ts  (Laravel: config/database.php)
-// Shaped for Sequelize: new Sequelize(config('database.name'), user, password, { ... })
+// config/database.ts (Laravel: config/database.php)
 import { env } from './env.js';
 
 export const databaseConfig = {
-  default: env.oneOf('DB_CONNECTION', ['mysql', 'postgres', 'sqlite'] as const, 'mysql'),
+  default: env.oneOf('DB_CONNECTION', ['mysql'] as const, 'mysql'),
 
   host: env.string('DB_HOST', '127.0.0.1'),
   port: env.number('DB_PORT', 3306),
   name: env.string('DB_DATABASE', 'spurs'),
   username: env.string('DB_USERNAME', 'root'),
   password: env.string('DB_PASSWORD', ''),
-  /** Path used when DB_CONNECTION=sqlite */
-  storage: env.string('DB_STORAGE', './database.sqlite'),
-
   /** Table that records which migrations have run (Laravel's `migrations` table) */
   migrationsTable: env.string('DB_MIGRATIONS_TABLE', 'migrations'),
 

@@ -1,5 +1,5 @@
 // notifications/Notify.ts
-// The facade: Notify.send(user, new WelcomeNotification(user.name))
+// The facade: Notify.send(user, new WelcomeNotification(user.fullname))
 import { AnonymousNotifiable } from './Notifiable.js';
 import { NotificationManager } from './NotificationManager.js';
 import type { Notification } from './Notification.js';

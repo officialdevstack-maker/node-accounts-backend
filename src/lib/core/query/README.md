@@ -1,6 +1,6 @@
-# Query pack (Laravel-style DB query builder with grammars)
+# Query pack (Laravel-style MySQL query builder)
 
-Needs the `database/` pack (it uses the same Sequelize connection) and `cli/`.
+Needs the `database/` pack (it uses the same MySQL connection) and `cli/`.
 
 ```ts
 import { DB } from '../lib/core/query/index.js';

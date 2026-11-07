@@ -12,10 +12,6 @@ export class DatabaseChannel implements Channel {
 
     if (notifiable.id === 'anonymous') return; // on-demand notifiables have no row to attach to
 
-    if (!DatabaseNotification.sequelize) {
-      throw new Error('DatabaseNotification is not initialised. Call initDatabaseNotification(sequelize) at boot.');
-    }
-
     await DatabaseNotification.create({
       id: notification.id,
       type: notification.type,

@@ -1,49 +1,62 @@
-// database/Blueprint.ts
-// Describes a table's columns, Laravel style:  t.string('email').unique();  t.foreignId('user_id').constrained();
-import { DataTypes, Sequelize, type ModelAttributeColumnOptions } from 'sequelize';
-import { pluralize } from './support.js';
+import { Raw } from '../query/Raw.js';
+import { pluralize, quoteId, quoteValue } from './support.js';
 
 export type ReferentialAction = 'CASCADE' | 'SET NULL' | 'RESTRICT' | 'NO ACTION' | 'SET DEFAULT';
 
 export interface IndexDefinition {
   fields: string[];
   unique: boolean;
-  name?: string;
+  name?: string | undefined;
+}
+
+interface ForeignKey {
+  table: string;
+  column: string;
+  onDelete?: ReferentialAction | undefined;
+  onUpdate?: ReferentialAction | undefined;
 }
 
 /** Returned by every column method so modifiers can be chained: t.string('email', 120).nullable().unique() */
 export class ColumnBuilder {
+  isNullable = false;
+  hasDefault = false;
+  defaultValue: unknown = null;
+  isUnique = false;
+  isPrimary = false;
+  isAutoIncrement = false;
+  foreign: ForeignKey | undefined = undefined;
+
   constructor(
     readonly name: string,
-    readonly definition: ModelAttributeColumnOptions,
+    readonly type: string,
     private readonly blueprint: Blueprint,
   ) {}
 
   /** Columns are NOT NULL unless you say otherwise. */
   nullable(value = true): this {
-    this.definition.allowNull = value;
+    this.isNullable = value;
     return this;
   }
 
   default(value: unknown): this {
-    this.definition.defaultValue = value;
+    this.hasDefault = true;
+    this.defaultValue = value;
     return this;
   }
 
   /** DEFAULT CURRENT_TIMESTAMP */
   useCurrent(): this {
-    this.definition.defaultValue = Sequelize.literal('CURRENT_TIMESTAMP');
-    return this;
+    return this.default(new Raw('CURRENT_TIMESTAMP'));
   }
 
   unique(): this {
-    this.definition.unique = true;
+    this.isUnique = true;
     return this;
   }
 
   primary(): this {
-    this.definition.primaryKey = true;
-    this.definition.allowNull = false;
+    this.isPrimary = true;
+    this.isNullable = false;
     return this;
   }
 
@@ -53,7 +66,7 @@ export class ColumnBuilder {
   }
 
   references(table: string, column = 'id'): this {
-    this.definition.references = { model: table, key: column };
+    this.foreign = { ...this.foreign, table, column };
     return this;
   }
 
@@ -63,12 +76,12 @@ export class ColumnBuilder {
   }
 
   onDelete(action: ReferentialAction): this {
-    this.definition.onDelete = action;
+    if (this.foreign) this.foreign.onDelete = action;
     return this;
   }
 
   onUpdate(action: ReferentialAction): this {
-    this.definition.onUpdate = action;
+    if (this.foreign) this.foreign.onUpdate = action;
     return this;
   }
 
@@ -77,8 +90,17 @@ export class ColumnBuilder {
   }
 
   nullOnDelete(): this {
-    this.definition.allowNull = true;
+    this.isNullable = true;
     return this.onDelete('SET NULL');
+  }
+
+  /** The column definition as it appears in CREATE TABLE / ADD COLUMN. */
+  sql(): string {
+    const parts = [quoteId(this.name), this.type, this.isNullable ? 'NULL' : 'NOT NULL'];
+    if (this.hasDefault) parts.push(`DEFAULT ${quoteValue(this.defaultValue)}`);
+    if (this.isAutoIncrement) parts.push('AUTO_INCREMENT');
+    if (this.isUnique) parts.push('UNIQUE');
+    return parts.join(' ');
   }
 }
 
@@ -88,102 +110,99 @@ export class Blueprint {
 
   constructor(readonly table: string) {}
 
-  private add(name: string, type: ModelAttributeColumnOptions['type'], extra: Partial<ModelAttributeColumnOptions> = {}): ColumnBuilder {
-    const column = new ColumnBuilder(name, { type, allowNull: false, ...extra }, this);
+  private add(name: string, type: string, opts: { primary?: boolean; autoIncrement?: boolean } = {}): ColumnBuilder {
+    const column = new ColumnBuilder(name, type, this);
+    if (opts.primary) column.primary();
+    if (opts.autoIncrement) column.isAutoIncrement = true;
     this.columns.push(column);
     return column;
   }
 
   // ---- keys -------------------------------------------------------------------------------
-  /** Auto-incrementing INTEGER primary key. */
   id(name = 'id'): ColumnBuilder {
-    return this.add(name, DataTypes.INTEGER, { primaryKey: true, autoIncrement: true });
+    return this.add(name, 'INT', { primary: true, autoIncrement: true });
   }
 
-  /** Auto-incrementing unsigned INTEGER primary key. */
   unsignedId(name = 'id'): ColumnBuilder {
-    return this.add(name, DataTypes.INTEGER.UNSIGNED, { primaryKey: true, autoIncrement: true });
+    return this.add(name, 'INT UNSIGNED', { primary: true, autoIncrement: true });
   }
 
-  /** Auto-incrementing BIGINT primary key (pair it with foreignBigId). */
   bigId(name = 'id'): ColumnBuilder {
-    return this.add(name, DataTypes.BIGINT, { primaryKey: true, autoIncrement: true });
+    return this.add(name, 'BIGINT', { primary: true, autoIncrement: true });
   }
 
-  /** Foreign key column matching id(). Chain .constrained() to add the FOREIGN KEY. */
   foreignId(name: string): ColumnBuilder {
-    return this.add(name, DataTypes.INTEGER);
+    return this.add(name, 'INT');
   }
 
-  /** Foreign key column matching unsignedId(). */
   foreignUnsignedId(name: string): ColumnBuilder {
-    return this.add(name, DataTypes.INTEGER.UNSIGNED);
+    return this.add(name, 'INT UNSIGNED');
   }
 
   foreignBigId(name: string): ColumnBuilder {
-    return this.add(name, DataTypes.BIGINT);
+    return this.add(name, 'BIGINT');
   }
 
   foreignUuid(name: string): ColumnBuilder {
-    return this.add(name, DataTypes.UUID);
+    return this.uuid(name);
   }
 
   uuid(name: string): ColumnBuilder {
-    return this.add(name, DataTypes.UUID);
+    return this.add(name, 'CHAR(36)');
   }
 
   // ---- columns ----------------------------------------------------------------------------
   string(name: string, length = 255): ColumnBuilder {
-    return this.add(name, DataTypes.STRING(length));
+    return this.add(name, `VARCHAR(${Math.trunc(length)})`);
   }
 
   text(name: string): ColumnBuilder {
-    return this.add(name, DataTypes.TEXT);
+    return this.add(name, 'TEXT');
   }
 
   integer(name: string): ColumnBuilder {
-    return this.add(name, DataTypes.INTEGER);
+    return this.add(name, 'INT');
   }
 
   bigInteger(name: string): ColumnBuilder {
-    return this.add(name, DataTypes.BIGINT);
+    return this.add(name, 'BIGINT');
   }
 
   boolean(name: string): ColumnBuilder {
-    return this.add(name, DataTypes.BOOLEAN);
+    return this.add(name, 'TINYINT(1)');
   }
 
   /** Use for money: decimal('amount', 14, 2) */
   decimal(name: string, precision = 10, scale = 2): ColumnBuilder {
-    return this.add(name, DataTypes.DECIMAL(precision, scale));
+    return this.add(name, `DECIMAL(${Math.trunc(precision)}, ${Math.trunc(scale)})`);
   }
 
   float(name: string): ColumnBuilder {
-    return this.add(name, DataTypes.FLOAT);
+    return this.add(name, 'FLOAT');
   }
 
   json(name: string): ColumnBuilder {
-    return this.add(name, DataTypes.JSON);
+    return this.add(name, 'JSON');
   }
 
   enum(name: string, values: string[]): ColumnBuilder {
-    return this.add(name, DataTypes.ENUM(...values));
+    return this.add(name, `ENUM(${values.map(quoteValue).join(', ')})`);
   }
 
   /** Date only, no time. */
   date(name: string): ColumnBuilder {
-    return this.add(name, DataTypes.DATEONLY);
+    return this.add(name, 'DATE');
   }
 
   dateTime(name: string): ColumnBuilder {
-    return this.add(name, DataTypes.DATE);
+    return this.add(name, 'DATETIME');
   }
 
   timestamp(name: string): ColumnBuilder {
     return this.dateTime(name);
   }
 
-  /** created_at + updated_at (nullable, Sequelize fills them in). */
+  /** created_at + updated_at (nullable, filled in by your code). */
   timestamps(): void {
     this.dateTime('created_at').nullable();
     this.dateTime('updated_at').nullable();
@@ -195,19 +214,52 @@ export class Blueprint {
 
   // ---- indexes ----------------------------------------------------------------------------
   index(fields: string | string[], options: { name?: string } = {}): void {
-    this.indexes.push({
-      fields: [fields].flat(),
-      unique: false,
-      ...(options.name ? { name: options.name } : {}),
-    });
+    this.indexes.push({ fields: [fields].flat(), unique: false, name: options.name });
   }
 
   /** Composite unique constraint: t.unique(['user_id', 'wallet_id']). For one column use .unique() on it. */
   unique(fields: string | string[], options: { name?: string } = {}): void {
-    this.indexes.push({
-      fields: [fields].flat(),
-      unique: true,
-      ...(options.name ? { name: options.name } : {}),
-    });
+    this.indexes.push({ fields: [fields].flat(), unique: true, name: options.name });
+  }
+
+  // ---- compiling --------------------------------------------------------------------------
+  indexName(fields: string[], unique: boolean): string {
+    return `${this.table}_${fields.join('_')}_${unique ? 'unique' : 'index'}`;
+  }
+
+  private indexSql(index: IndexDefinition): string {
+    const name = quoteId(index.name ?? this.indexName(index.fields, index.unique));
+    return `${index.unique ? 'UNIQUE ' : ''}KEY ${name} (${index.fields.map(quoteId).join(', ')})`;
+  }
+
+  private foreignSql(column: ColumnBuilder): string | undefined {
+    const f = column.foreign;
+    if (!f) return undefined;
+
+    let sql = `CONSTRAINT ${quoteId(`${this.table}_${column.name}_foreign`)} FOREIGN KEY (${quoteId(column.name)}) REFERENCES ${quoteId(f.table)} (${quoteId(f.column)})`;
+    if (f.onDelete) sql += ` ON DELETE ${f.onDelete}`;
+    if (f.onUpdate) sql += ` ON UPDATE ${f.onUpdate}`;
+    return sql;
+  }
+
+  createSql(): string {
+    const primary = this.columns.filter((c) => c.isPrimary).map((c) => quoteId(c.name));
+    const lines = [
+      ...this.columns.map((c) => c.sql()),
+      ...(primary.length ? [`PRIMARY KEY (${primary.join(', ')})`] : []),
+      ...this.indexes.map((i) => this.indexSql(i)),
+      ...this.columns.map((c) => this.foreignSql(c)).filter((s): s is string => Boolean(s)),
+    ];
+    return `CREATE TABLE ${quoteId(this.table)} (\n  ${lines.join(',\n  ')}\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`;
+  }
+
+  /** One statement per change, for schema.table(). */
+  alterSql(): string[] {
+    const alter = `ALTER TABLE ${quoteId(this.table)}`;
+    return [
+      ...this.columns.map((c) => `${alter} ADD COLUMN ${c.sql()}`),
+      ...this.indexes.map((i) => `${alter} ADD ${this.indexSql(i)}`),
+      ...this.columns.map((c) => this.foreignSql(c)).filter((s): s is string => Boolean(s)).map((s) => `${alter} ADD ${s}`),
+    ];
   }
 }

@@ -4,7 +4,6 @@
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { Sequelize } from 'sequelize';
 import { config } from '../config/index.js';
 import { Connection } from '../query/Connection.js';
 import { Migration } from './Migration.js';
@@ -62,14 +61,14 @@ export class Migrator {
   private tableReady = false;
 
   constructor(
-    sequelize: Sequelize,
+    connection: Connection,
     options: MigratorOptions = {},
   ) {
     this.table = options.table ?? config('database.migrationsTable');
     this.dir = options.dir ?? databasePath('migrations');
     this.onEvent = options.onEvent;
-    this.schema = new Schema(sequelize);
-    this.db = new Connection(sequelize);
+    this.schema = new Schema(connection);
+    this.db = connection;
   }
 
   // ---- reading ---------------------------------------------------------------------------

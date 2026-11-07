@@ -3,20 +3,15 @@ import { AsyncLocalStorage } from "async_hooks";
 import { createHash, randomBytes } from "crypto";
 import type { NextFunction, Request, Response } from "express";
 import bcrypt from "bcryptjs";
-import { Op, type WhereOptions } from "sequelize";
 
 import { User } from "../../models/User.js";
 import { AccessToken } from "../../models/AccessToken.js";
-// import { AccessToken } from "../../models/AccessToken.js";
 
 const COOKIE_NAME = "auth_token";
 const SHORT_MS = 2 * 60 * 60 * 1000;           // 2 hours
 const REMEMBER_MS = 30 * 24 * 60 * 60 * 1000;  // 30 days
 
-export type Credentials = {
-  password: string;
-  [field: string]: unknown;
-};
+export type Credentials = { email: string; password: string };
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 const storage = new AsyncLocalStorage<Guard>();
@@ -41,9 +36,6 @@ export class Guard {
   /** Creates a token row and returns the plain token (shown once, never stored). */
   async createToken(user: User, remember = false): Promise<string> {
     const plain = randomBytes(40).toString("hex");
-    
-    // lib/auth/index.ts  (temporary debug line, inside Guard.user(), right after `if (!plain) return null;`)
-    console.log("incoming token:", plain, "-> hash:", sha256(plain));
 
     await AccessToken.create({
       userId: user.id,
@@ -55,10 +47,8 @@ export class Guard {
     return plain;
   }
 
-  async attempt(credentials: Credentials, remember = false): Promise<boolean> {
-    const { password, ...where } = credentials;
-    const user = await User.scope("withPassword").findOne({ where: where as WhereOptions });
-
+  async attempt({ email, password }: Credentials, remember = false): Promise<boolean> {
+    const user = await User.findByEmailWithPassword(email);
     if (!user || !(await bcrypt.compare(password, user.password))) return false;
 
     await this.login(user, remember);
@@ -77,7 +67,7 @@ export class Guard {
       maxAge: remember ? REMEMBER_MS : undefined,
     });
 
-    this._user = await User.findByPk(user.id); // fresh copy without password
+    this._user = await User.findById(user.id);
     this._resolved = true;
     return this._user;
   }
@@ -94,19 +84,11 @@ export class Guard {
     const plain = this.extractToken();
     if (!plain) return null;
 
-    const record = await AccessToken.findOne({
-      where: {
-        tokenHash: sha256(plain),
-        [Op.or]: [{ expiresAt: null }, { expiresAt: { [Op.gt]: new Date() } }],
-      },
-    });
+    const record = await AccessToken.findValid(sha256(plain));
     if (!record) return null;
 
-    this._user = await User.findByPk(record.userId);
-    if (this._user) {
-      record.lastUsedAt = new Date();
-      void record.save().catch(() => {}); // don't block the request on this
-    }
+    this._user = await User.findById(record.userId);
+    if (this._user) void AccessToken.touch(record.id).catch(() => {});
     return this._user;
   }
 
@@ -126,7 +108,7 @@ export class Guard {
   /** Revokes the current token (now async). */
   async logout(): Promise<void> {
     const plain = this.extractToken();
-    if (plain) await AccessToken.destroy({ where: { tokenHash: sha256(plain) } });
+    if (plain) await AccessToken.destroyByHash(sha256(plain));
 
     this.res.clearCookie(COOKIE_NAME);
     this._user = null;
@@ -137,7 +119,7 @@ export class Guard {
   /** Revokes every token the user has (log out of all devices). */
   async logoutAll(): Promise<void> {
     const id = await this.id();
-    if (id) await AccessToken.destroy({ where: { userId: id } });
+    if (id) await AccessToken.destroyByUser(id);
 
     this.res.clearCookie(COOKIE_NAME);
     this._user = null;

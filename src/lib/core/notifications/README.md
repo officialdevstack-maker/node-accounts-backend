@@ -1,21 +1,16 @@
 <!-- notifications/README.md -->
 # Notification pack (Laravel-style)
 
-Needs the `mail/` pack (mail channel) and `sequelize` (database channel).
+Needs the `mail/` pack (mail channel). The database channel uses the query builder and the `notifications` migration.
 
-## 1. Boot (once, e.g. in src/server.ts)
-```ts
-import { initDatabaseNotification, DatabaseNotification } from './notifications/index.js';
-
-initDatabaseNotification(sequelize);        // your existing Sequelize instance
-await DatabaseNotification.sync();          // or add a migration for the `notifications` table
-```
+## 1. Boot
+Run `artisan migrate` to create the notifications table.
 
 ## 2. Send
 ```ts
 import { Notify, WelcomeNotification, OtpNotification, WalletCreditedNotification } from '../notifications/index.js';
 
-await Notify.send(user, new WelcomeNotification(user.name));             // mail + database
+await Notify.send(user, new WelcomeNotification(user.fullname));         // mail + database
 await Notify.send(user, new OtpNotification('482913'));                  // mail + sms (not queued)
 await Notify.send(user, new WalletCreditedNotification(5000, ref, 12000)); // queued + retries
 await Notify.send(users, new WelcomeNotification('Team'));               // many at once

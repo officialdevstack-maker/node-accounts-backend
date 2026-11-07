@@ -1,11 +1,13 @@
 // middleware/errorHandler.ts
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import { ValidationError, UniqueConstraintError } from "sequelize";
 import jwt from "jsonwebtoken";
 import HttpError from "../lib/error.js";
 // import { HttpError } from "../errors/HttpError.js";
 
 const isProd = process.env.NODE_ENV === "production";
+type MysqlError = Error & { code?: string; sqlMessage?: string };
+const isDuplicate = (error: unknown): error is MysqlError =>
+  error instanceof Error && (error as MysqlError).code === "ER_DUP_ENTRY";
 
 /**
  * Catch-all for any route that didn't match.
@@ -35,16 +37,11 @@ export function errorHandler(
     status = err.status;
     message = err.message;
     errors = err.errors;
-  } else if (err instanceof UniqueConstraintError) {
+  } else if (isDuplicate(err)) {
     status = 422;
     message = "Validation failed.";
-    errors = Object.fromEntries(
-      err.errors.map((e) => [e.path ?? "field", `${e.path ?? "Value"} already in use.`])
-    );
-  } else if (err instanceof ValidationError) {
-    status = 422;
-    message = "Validation failed.";
-    errors = Object.fromEntries(err.errors.map((e) => [e.path ?? "field", e.message]));
+    const key = err.sqlMessage?.match(/for key '(.+?)'/)?.[1]?.split(".").pop() ?? "field";
+    errors = { [key]: `${key} already in use.` };
   } else if (err instanceof jwt.JsonWebTokenError) {
     status = 401;
     message = "Invalid or expired token.";

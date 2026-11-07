@@ -1,33 +1,50 @@
-// src/models/AccessToken.ts
-import { DataTypes, Model, type CreationOptional, type InferAttributes, type InferCreationAttributes } from "sequelize"
-import db from "../lib/database.js"
+import { DB, type Row } from '../lib/core/query/index.js';
 
-
-export class AccessToken extends Model<
-  InferAttributes<AccessToken>,
-  InferCreationAttributes<AccessToken>
-> {
-  // `declare` stops TS class fields from shadowing Sequelize's getters/setters
-  declare id: CreationOptional<number>;
-  declare userId: number;
-  declare tokenHash: string;
-  declare expiresAt: Date | null;
-  declare lastUsedAt: CreationOptional<Date | null>;
-  
-  static {
-    this.init(
-      {
-    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
-    userId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false, field: "user_id" },
-    tokenHash: { type: DataTypes.STRING(64), allowNull: false, unique: true, field: "token_hash" },
-    expiresAt: { type: DataTypes.DATE, allowNull: true, field: "expires_at" },
-    lastUsedAt: { type: DataTypes.DATE, allowNull: true, field: "last_used_at" },
-  },
-  {
-    sequelize: db,
-    tableName: "access_tokens",
-    indexes: [{ fields: ["user_id"] }],
-  }
-)
-  }
+export interface AccessTokenRecord {
+  id: number;
+  userId: number;
+  tokenHash: string;
+  expiresAt: Date | null;
+  lastUsedAt: Date | null;
 }
+
+const hydrate = (row: Row): AccessTokenRecord => ({
+  id: Number(row.id),
+  userId: Number(row.user_id),
+  tokenHash: row.token_hash,
+  expiresAt: row.expires_at ?? null,
+  lastUsedAt: row.last_used_at ?? null,
+});
+
+export const AccessToken = {
+  async create(input: { userId: number; tokenHash: string; expiresAt: Date | null }): Promise<void> {
+    const now = new Date();
+    await DB.table('access_tokens').insert({
+      user_id: input.userId,
+      token_hash: input.tokenHash,
+      expires_at: input.expiresAt,
+      created_at: now,
+      updated_at: now,
+    });
+  },
+
+  async findValid(tokenHash: string): Promise<AccessTokenRecord | null> {
+    const row = await DB.table('access_tokens')
+      .where('token_hash', tokenHash)
+      .where((q) => q.whereNull('expires_at').orWhere('expires_at', '>', new Date()))
+      .first();
+    return row ? hydrate(row) : null;
+  },
+
+  async touch(id: number): Promise<void> {
+    await DB.table('access_tokens').where('id', id).update({ last_used_at: new Date() });
+  },
+
+  async destroyByHash(tokenHash: string): Promise<void> {
+    await DB.table('access_tokens').where('token_hash', tokenHash).delete();
+  },
+
+  async destroyByUser(userId: number): Promise<void> {
+    await DB.table('access_tokens').where('user_id', userId).delete();
+  },
+};

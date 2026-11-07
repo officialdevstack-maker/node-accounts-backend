@@ -1,4 +1,3 @@
-import type { Sequelize } from 'sequelize';
 import { Database } from '../database/Database.js';
 import type { QueryBuilder } from './Builder.js';
 import { Connection } from './Connection.js';
@@ -6,14 +5,14 @@ import { Raw } from './Raw.js';
 import type { QueryEvent, Row } from './types.js';
 
 export class DB {
-  private static sequelize?: Sequelize;
+  private static custom?: Connection;
 
-  static useConnection(sequelize: Sequelize): void {
-    this.sequelize = sequelize;
+  static useConnection(connection: Connection): void {
+    this.custom = connection;
   }
 
   static connection(): Connection {
-    return new Connection(this.sequelize ?? Database.connection());
+    return this.custom ?? Database.connection();
   }
 
   static table(name: string | Raw): QueryBuilder {

@@ -24,7 +24,7 @@ class AuthenticationController {
 
         const data = v.validated()
         const email = String(data.email).trim().toLowerCase()
-        const user = await User.scope('withPassword').findOne({ where: { email } })
+        const user = await User.findByEmailWithPassword(email)
 
         if (!user || !(await bcrypt.compare(String(data.password), user.password))) {
             return res.status(401).json({

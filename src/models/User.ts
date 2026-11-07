@@ -1,72 +1,73 @@
-// src/models/User.ts
-import { DataTypes, Model } from "sequelize"
-import db from "../lib/database.js"
-// const bcrypt = require('bcryptjs');
-import bcrypt from "bcryptjs"
+import bcrypt from 'bcryptjs';
+import { DB, type Row } from '../lib/core/query/index.js';
 
+export type AccountType = 'user' | 'business' | 'developer';
 
-export class User extends Model {
-  // `declare` stops TS class fields from shadowing Sequelize's getters/setters
-  declare id: number
-  declare fullname: string
-  declare name: string
-  declare email: string
-  declare password: string
-  declare phone: string | null
-  declare isVerified: boolean
-  declare account_type: 'user' | 'business' | 'developer'
-  declare firstName: string
-  declare lastName: string | null
-
-  static {
-    this.init(
-      {
-        id: {
-          type: DataTypes.INTEGER.UNSIGNED,
-          autoIncrement: true,
-          primaryKey: true,
-        },
-
-        fullname: {
-          type: DataTypes.STRING,
-          allowNull: false,
-        },
-
-        email: { type: DataTypes.STRING, allowNull: false, unique: true, validate: { isEmail: true } },
-        password: { type: DataTypes.STRING, allowNull: false },
-
-        phone: {
-            type: DataTypes.STRING,
-            allowNull: true,
-        },
-
-        isVerified: {
-            type: DataTypes.BOOLEAN,
-            defaultValue: false
-        },
-
-        account_type: {
-            type: DataTypes.ENUM("user", "business" , "developer"),
-            defaultValue: 'user'
-        }
-      },
-      {
-        sequelize: db,
-        defaultScope: { attributes: { exclude: ['password'] } },
-    scopes: { withPassword: { attributes: {} as any } },
-    hooks: {
-      beforeCreate: async (user: any) => {
-        user.password = await bcrypt.hash(user.password, 10);
-      },
-      beforeUpdate: async (user) => {
-        if (user.changed('password')) {
-          user.password = await bcrypt.hash(user.password, 10);
-        }
-      },
-    },
-
-
-      }
-    )
-  }
+export interface User {
+  id: number;
+  fullname: string;
+  email: string;
+  phone: string | null;
+  isVerified: boolean;
+  accountType: AccountType;
+  createdAt: Date;
+  updatedAt: Date;
 }
+
+export interface UserWithPassword extends User {
+  password: string;
+}
+
+const PUBLIC = ['id', 'fullname', 'email', 'phone', 'is_verified', 'account_type', 'created_at', 'updated_at'];
+
+const hydrate = (row: Row): User => ({
+  id: Number(row.id),
+  fullname: row.fullname,
+  email: row.email,
+  phone: row.phone ?? null,
+  isVerified: Boolean(row.is_verified),
+  accountType: row.account_type,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+export const User = {
+  async findById(id: number): Promise<User | null> {
+    const row = await DB.table('users').select(...PUBLIC).find(id);
+    return row ? hydrate(row) : null;
+  },
+
+  async findByEmail(email: string): Promise<User | null> {
+    const row = await DB.table('users').select(...PUBLIC).where('email', email).first();
+    return row ? hydrate(row) : null;
+  },
+
+  /** Only for credential checks. Everything else should use the methods above (no password column). */
+  async findByEmailWithPassword(email: string): Promise<UserWithPassword | null> {
+    const row = await DB.table('users').where('email', email).first();
+    return row ? { ...hydrate(row), password: row.password } : null;
+  },
+
+  async create(input: {
+    fullname: string;
+    email: string;
+    password: string;
+    phone?: string | null;
+    accountType?: AccountType;
+  }): Promise<User> {
+    const now = new Date();
+    const id = await DB.table('users').insertGetId({
+      fullname: input.fullname,
+      email: input.email,
+      password: await bcrypt.hash(input.password, 10),
+      phone: input.phone ?? null,
+      is_verified: false,
+      account_type: input.accountType ?? 'user',
+      created_at: now,
+      updated_at: now,
+    });
+    const user = await User.findById(Number(id));
+    if (!user) throw new Error('The user was created but could not be loaded.');
+    return user;
+  },
+};

@@ -7,7 +7,7 @@ export { AnonymousNotifiable, routeFor } from './Notifiable.js';
 export { MailChannel } from './channels/MailChannel.js';
 export { DatabaseChannel } from './channels/DatabaseChannel.js';
 export { SmsChannel, LogSmsDriver, type SmsDriver } from './channels/SmsChannel.js';
-export { DatabaseNotification, initDatabaseNotification } from './models/DatabaseNotification.js';
+export { DatabaseNotification } from './models/DatabaseNotification.js';
 export * from './types.js';
 
 export { WelcomeNotification } from './messages/WelcomeNotification.js';

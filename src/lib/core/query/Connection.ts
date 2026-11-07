@@ -1,24 +1,30 @@
-import { QueryTypes, type Sequelize, type Transaction } from 'sequelize';
+import type { Pool, PoolConnection, ResultSetHeader } from 'mysql2/promise';
 import { QueryBuilder } from './Builder.js';
 import { grammarFor, type Grammar } from './grammar/index.js';
 import { Raw } from './Raw.js';
 import { normalizeBinding } from './support.js';
 import type { ExecResult, QueryEvent, Row } from './types.js';
 
+type Runner = { query(sql: string, values?: unknown[]): Promise<[unknown, unknown]> };
+
 export class Connection {
   static readonly listeners: Array<(event: QueryEvent) => void> = [];
 
-  readonly grammar: Grammar;
+  readonly grammar: Grammar = grammarFor('mysql');
+  private inTransaction = false;
 
+  /** `session` is set when this connection is pinned to one physical connection (transactions, SET ...). */
   constructor(
-    readonly sequelize: Sequelize,
-    private readonly trx?: Transaction,
-  ) {
-    this.grammar = grammarFor(sequelize.getDialect());
-  }
+    private readonly pool: Pool,
+    private readonly pinned?: PoolConnection,
+  ) {}
 
   get dialect(): string {
     return this.grammar.dialect;
+  }
+
+  private get runner(): Runner {
+    return (this.pinned ?? this.pool) as unknown as Runner;
   }
 
   table(name: string | Raw): QueryBuilder {
@@ -35,9 +41,7 @@ export class Connection {
 
   async select(sql: string, bindings: readonly unknown[] = []): Promise<Row[]> {
     const params = bindings.map(normalizeBinding);
-    const rows = await this.run(sql, params, () =>
-      this.sequelize.query(sql, { replacements: params, type: QueryTypes.SELECT, ...this.transactionOption() }),
-    );
+    const [rows] = await this.run(sql, params, () => this.runner.query(sql, params));
     return rows as Row[];
   }
 
@@ -64,39 +68,41 @@ export class Connection {
 
   async execute(sql: string, bindings: readonly unknown[] = []): Promise<ExecResult> {
     const params = bindings.map(normalizeBinding);
-    const [results, meta] = await this.run(sql, params, () =>
-      this.sequelize.query(sql, { replacements: params, type: QueryTypes.RAW, ...this.transactionOption() }),
-    );
+    const [result] = await this.run(sql, params, () => this.runner.query(sql, params));
 
-    let rows: Row[] = [];
-    let affected: number | undefined;
-    let insertId: number | string | undefined;
+    if (Array.isArray(result)) return { rows: result as Row[], affectedRows: result.length, insertId: undefined };
 
-    const read = (source: unknown) => {
-      if (typeof source === 'number') {
-        affected ??= source;
-      } else if (source && typeof source === 'object' && !Array.isArray(source)) {
-        const o = source as Record<string, unknown>;
-        affected ??= (o.affectedRows ?? o.changes ?? o.rowCount) as number | undefined;
-        insertId ??= (o.insertId ?? o.lastID) as number | string | undefined;
-      }
-    };
+    const header = result as ResultSetHeader;
+    return { rows: [], affectedRows: Number(header.affectedRows ?? 0), insertId: header.insertId || undefined };
+  }
 
-    if (Array.isArray(results)) rows = results as Row[];
-    else if (typeof results === 'number') insertId = results;
-    else read(results);
-    read(meta);
+  /** Run `callback` on one physical connection (needed for SET ..., transactions). */
+  async session<T>(callback: (connection: Connection) => Promise<T>): Promise<T> {
+    if (this.pinned) return callback(this);
 
-    return { rows, affectedRows: Number(affected ?? rows.length), insertId };
+    const physical = await this.pool.getConnection();
+    try {
+      return await callback(new Connection(this.pool, physical));
+    } finally {
+      physical.release();
+    }
   }
 
   async transaction<T>(callback: (trx: Connection) => Promise<T>): Promise<T> {
-    if (this.trx) return callback(this);
-    return this.sequelize.transaction((transaction) => callback(new Connection(this.sequelize, transaction)));
-  }
+    if (this.inTransaction) return callback(this);
 
-  private transactionOption(): { transaction?: Transaction } {
-    return this.trx ? { transaction: this.trx } : {};
+    return this.session(async (trx) => {
+      trx.inTransaction = true;
+      await trx.statement('START TRANSACTION');
+      try {
+        const result = await callback(trx);
+        await trx.statement('COMMIT');
+        return result;
+      } catch (error) {
+        await trx.statement('ROLLBACK').catch(() => undefined);
+        throw error;
+      }
+    });
   }
 
   private async run<T>(sql: string, bindings: unknown[], execute: () => Promise<T>): Promise<T> {

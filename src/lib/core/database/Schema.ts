@@ -1,99 +1,98 @@
-// database/Schema.ts
-// What a migration receives. A thin Laravel-style layer over Sequelize's QueryInterface.
-//
-//   await schema.create('wallets', (t) => { t.id(); t.foreignId('user_id').constrained().cascadeOnDelete(); t.timestamps(); });
-//   await schema.table('wallets', (t) => { t.string('currency', 3).default('NGN'); });
-//   await schema.dropIfExists('wallets');
-//
-// Need something this doesn't cover?  schema.queryInterface  or  schema.raw('...')  are always there.
-import type { QueryInterface, Sequelize } from 'sequelize';
+import type { Connection } from '../query/Connection.js';
 import { Blueprint } from './Blueprint.js';
+import { quoteId } from './support.js';
 
 export class Schema {
-  constructor(readonly sequelize: Sequelize) {}
-
-  get queryInterface(): QueryInterface {
-    return this.sequelize.getQueryInterface();
-  }
+  constructor(readonly connection: Connection) {}
 
   /** CREATE TABLE */
   async create(table: string, build: (blueprint: Blueprint) => void): Promise<void> {
     const blueprint = new Blueprint(table);
     build(blueprint);
-
     if (!blueprint.columns.length) throw new Error(`Cannot create table "${table}" without any columns.`);
 
-    const attributes = Object.fromEntries(blueprint.columns.map((c) => [c.name, c.definition]));
-    await this.queryInterface.createTable(table, attributes as Parameters<QueryInterface['createTable']>[1]);
-    await this.applyIndexes(blueprint);
+    await this.raw(blueprint.createSql());
   }
 
-  /** ALTER TABLE ... ADD COLUMN for every column in the blueprint (plus any indexes). */
+  /** ALTER TABLE ... ADD COLUMN for every column in the blueprint (plus indexes and foreign keys). */
   async table(table: string, build: (blueprint: Blueprint) => void): Promise<void> {
     const blueprint = new Blueprint(table);
     build(blueprint);
-
-    for (const column of blueprint.columns) {
-      await this.queryInterface.addColumn(table, column.name, column.definition);
-    }
-    await this.applyIndexes(blueprint);
+    for (const sql of blueprint.alterSql()) await this.raw(sql);
   }
 
-  /** DROP TABLE IF EXISTS */
   async drop(table: string): Promise<void> {
-    await this.queryInterface.dropTable(table);
+    await this.raw(`DROP TABLE ${quoteId(table)}`);
   }
 
   async dropIfExists(table: string): Promise<void> {
-    await this.drop(table);
+    await this.raw(`DROP TABLE IF EXISTS ${quoteId(table)}`);
   }
 
   /** DROP every table in the database. */
   async dropAllTables(): Promise<void> {
-    await this.queryInterface.dropAllTables();
+    const rows = await this.connection.select(
+      'select table_name as name from information_schema.tables where table_schema = database() and table_type = ?',
+      ['BASE TABLE'],
+    );
+
+    // SET FOREIGN_KEY_CHECKS is per physical connection, so run everything on one.
+    await this.connection.session(async (c) => {
+      await c.statement('SET FOREIGN_KEY_CHECKS = 0');
+      try {
+        for (const row of rows) await c.statement(`DROP TABLE IF EXISTS ${quoteId(String(row.name))}`);
+      } finally {
+        await c.statement('SET FOREIGN_KEY_CHECKS = 1');
+      }
+    });
   }
 
   async rename(from: string, to: string): Promise<void> {
-    await this.queryInterface.renameTable(from, to);
+    await this.raw(`RENAME TABLE ${quoteId(from)} TO ${quoteId(to)}`);
   }
 
   async dropColumn(table: string, column: string): Promise<void> {
-    await this.queryInterface.removeColumn(table, column);
+    await this.raw(`ALTER TABLE ${quoteId(table)} DROP COLUMN ${quoteId(column)}`);
   }
 
   async renameColumn(table: string, from: string, to: string): Promise<void> {
-    await this.queryInterface.renameColumn(table, from, to);
+    await this.raw(`ALTER TABLE ${quoteId(table)} RENAME COLUMN ${quoteId(from)} TO ${quoteId(to)}`);
   }
 
+  /** Pass the index name, or the column list for an index created without a custom name. */
   async dropIndex(table: string, nameOrFields: string | string[]): Promise<void> {
-    await this.queryInterface.removeIndex(table, nameOrFields as never);
+    let name: string;
+    if (Array.isArray(nameOrFields)) {
+      const row = await this.connection.selectOne(
+        "select index_name as name from information_schema.statistics where table_schema = database() and table_name = ? and index_name <> 'PRIMARY' group by index_name having group_concat(column_name order by seq_in_index separator ',') = ? limit 1",
+        [table, nameOrFields.join(',')],
+      );
+      if (!row) throw new Error(`Index on ${table} (${nameOrFields.join(', ')}) was not found.`);
+      name = String(row.name);
+    } else {
+      name = nameOrFields;
+    }
+    await this.raw(`DROP INDEX ${quoteId(name)} ON ${quoteId(table)}`);
   }
 
   async hasTable(table: string): Promise<boolean> {
-    const tables = (await this.queryInterface.showAllTables()) as unknown[];
-    const names = tables.map((t) => (typeof t === 'string' ? t : String((t as { tableName?: string }).tableName ?? '')));
-    return names.includes(table);
+    const row = await this.connection.selectOne(
+      'select 1 as ok from information_schema.tables where table_schema = database() and table_name = ? limit 1',
+      [table],
+    );
+    return row !== null;
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {
-    try {
-      return column in (await this.queryInterface.describeTable(table));
-    } catch {
-      return false; // describeTable throws when the table doesn't exist
-    }
+    const row = await this.connection.selectOne(
+      'select 1 as ok from information_schema.columns where table_schema = database() and table_name = ? and column_name = ? limit 1',
+      [table, column],
+    );
+    return row !== null;
   }
 
   /** Run a raw SQL statement. */
   async raw(sql: string): Promise<void> {
-    await this.sequelize.query(sql);
-  }
-
-  private async applyIndexes(blueprint: Blueprint): Promise<void> {
-    for (const index of blueprint.indexes) {
-      await this.queryInterface.addIndex(blueprint.table, index.fields, {
-        unique: index.unique,
-        ...(index.name ? { name: index.name } : {}),
-      });
-    }
+    await this.connection.statement(sql);
   }
 }
