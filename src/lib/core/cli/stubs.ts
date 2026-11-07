@@ -26,7 +26,7 @@ export interface NotificationStubOptions {
   cls: string;
   title: string;
   channels: string[];
-  mailable?: string;
+  mailable?: string | undefined;
 }
 
 export function notificationStub({ cls, title, channels, mailable }: NotificationStubOptions): string {
