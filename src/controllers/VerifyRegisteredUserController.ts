@@ -1,21 +1,21 @@
-import type { Request, Response } from "express"
-import { User } from "../models/User.js"
-import { Mail, OtpMail, WelcomeMail } from "../lib/core/mail/index.js"
+import type { Request } from "express"
+import { Controller } from "../lib/core/controller/index.js"
 import { Notify } from "../lib/core/notifications/Notify.js";
 import { OtpNotification } from "../lib/core/notifications/index.js";
+import { User } from "../models/User.js"
 
-class VerifyRegisteredUserController {
+class VerifyRegisteredUserController extends Controller {
 
-    async create(req:Request, res:Response) {
+    async create(req: Request) {
         const { email } = req.body as { email?: string }
         const user = await User.findByEmail(String(email ?? ''))
 
         if (!user) {
-            return res.status(404).json({ message: 'User not found.' })
+            return this.abort(404, 'User not found.')
         }
 
         Notify.send(user, new OtpNotification(""))
-        return res.json({ message: 'Verification code sent.' })
+        return this.ok(undefined, 'Verification code sent.')
     }
 
 }

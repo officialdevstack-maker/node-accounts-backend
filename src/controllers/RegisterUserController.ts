@@ -1,13 +1,13 @@
-import type { Request, Response } from "express"
+import type { Request } from "express"
 import Auth from "../lib/auth/index.js"
-import { User } from "../models/User.js"
-import Validator from "../lib/core/validation/Validator.js";
+import { Controller } from "../lib/core/controller/index.js"
 import { Mail, WelcomeMail } from "../lib/core/mail/index.js";
+import Validator from "../lib/core/validation/Validator.js";
+import { User } from "../models/User.js"
 
+class RegisterUserController extends Controller {
 
-class RegisterUserController {
-
-    async create(req:Request, res:Response){
+    async create(req: Request) {
         const v = Validator.make(req.body, {
             // validators/auth.ts
             fullname: [ "required",  "string",
@@ -21,8 +21,8 @@ class RegisterUserController {
             "fullname.regex": "Must enter first and last names"
         });
 
-        if(await v.fails()){
-            return res.status(422).json({ message: "validation error",  errors: v.errors().toObject() })
+        if (await v.fails()) {
+            return this.abort(422, "validation error", v.errors().toObject())
         }
 
         const data = v.validated()
@@ -37,12 +37,9 @@ class RegisterUserController {
 
         const token = Auth.token()
         await Mail.to(user.email).send(new WelcomeMail(user));
-        
 
-
-        return res.json({ data: {auth, token, user}, message: "successfully registered" });
+        return this.ok({ auth, token, user }, "successfully registered");
     }
-
 
 }
 

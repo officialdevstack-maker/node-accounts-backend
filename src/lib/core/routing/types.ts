@@ -1,15 +1,18 @@
-import type { RequestHandler } from 'express';
+import type { NextFunction, Request, RequestHandler, Response } from 'express';
 
 export type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'options' | 'head';
+
+/** A route handler. What it returns is sent for you (see response/). */
+export type HandlerFunction = (req: Request, res: Response, next: NextFunction) => unknown;
 
 /** [controllerInstance, 'methodName'] where the method name is checked against the controller's keys. */
 export type ControllerAction<T extends object = object> = [controller: T, method: Extract<keyof T, string>];
 
 /** What you can pass to Route.get(...) */
-export type RouteAction<T extends object = object> = RequestHandler | ControllerAction<T>;
+export type RouteAction<T extends object = object> = HandlerFunction | ControllerAction<T>;
 
 /** What the registry stores (loosely typed on purpose). */
-export type RouteHandler = RequestHandler | [controller: object, method: string];
+export type RouteHandler = HandlerFunction | [controller: object, method: string];
 
 /** A handler, or an alias like 'auth' / 'throttle:5,1' (see Middleware.alias). */
 export type MiddlewareLike = RequestHandler | string;

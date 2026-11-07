@@ -9,39 +9,39 @@ export interface ControllerStubOptions {
 
 export function controllerStub({ cls, instance, importPath, resource }: ControllerStubOptions): string {
   const methods = resource
-    ? `  async index(req: Request, res: Response) {
+    ? `  async index(req: Request) {
     // const { page, perPage } = this.pageParams(req);
-    // return this.paginated(res, await DB.table('things').orderByDesc('id').paginate(perPage, page));
-    return this.ok(res, []);
+    // return this.paginated(await DB.table('things').orderByDesc('id').paginate(perPage, page));
+    return this.ok([]);
   }
 
-  async store(req: Request, res: Response) {
+  async store(req: Request) {
     const data = await this.validate(req, {
       // name: 'required|string|max:255',
     });
-    return this.created(res, data);
+    return this.created(data);
   }
 
-  async show(req: Request, res: Response) {
-    return this.ok(res, { id: req.params.id });
+  async show(req: Request) {
+    return this.ok({ id: req.params.id });
   }
 
-  async update(req: Request, res: Response) {
+  async update(req: Request) {
     const data = await this.validate(req, {
       // name: 'sometimes|string|max:255',
     });
-    return this.ok(res, { id: req.params.id, ...data }, 'updated');
+    return this.ok({ id: req.params.id, ...data }, 'updated');
   }
 
-  async destroy(req: Request, res: Response) {
-    return this.ok(res, undefined, 'deleted');
+  async destroy(req: Request) {
+    return this.noContent();
   }`
-    : `  async index(req: Request, res: Response) {
-    return this.ok(res, []);
+    : `  async index(req: Request) {
+    return this.ok([]);
   }`;
 
   return `// src/controllers/${cls}.ts
-import type { Request, Response } from 'express';
+import type { Request } from 'express';
 import { Controller } from '${importPath}';
 
 class ${cls} extends Controller {

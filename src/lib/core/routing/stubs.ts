@@ -3,34 +3,34 @@
 export function controllerStub(cls: string, instance: string, resource: boolean): string {
   const methods = resource
     ? `
-    async index(req: Request, res: Response) {
-        return res.json({ data: [], message: "ok" })
+    async index(req: Request) {
+        return { data: [], message: "ok" }
     }
 
-    async store(req: Request, res: Response) {
-        return res.status(201).json({ data: req.body, message: "created" })
+    async store(req: Request) {
+        return { data: req.body, message: "created" }
     }
 
-    async show(req: Request, res: Response) {
-        return res.json({ data: { id: req.params.id }, message: "ok" })
+    async show(req: Request) {
+        return { data: { id: req.params.id }, message: "ok" }
     }
 
-    async update(req: Request, res: Response) {
-        return res.json({ data: { id: req.params.id, ...req.body }, message: "updated" })
+    async update(req: Request) {
+        return { data: { id: req.params.id, ...req.body }, message: "updated" }
     }
 
-    async destroy(req: Request, res: Response) {
-        return res.json({ message: "deleted" })
+    async destroy(req: Request) {
+        return { message: "deleted" }
     }
 `
     : `
-    async index(req: Request, res: Response) {
-        return res.json({ message: "ok" })
+    async index(req: Request) {
+        return { message: "ok" }
     }
 `;
 
   return `// src/controllers/${cls}.ts
-import type { Request, Response } from "express"
+import type { Request } from "express"
 
 class ${cls} {
 ${methods}

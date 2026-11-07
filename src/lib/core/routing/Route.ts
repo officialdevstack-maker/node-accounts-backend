@@ -1,9 +1,11 @@
 // The facade:  Route.get('/profile', [controller, 'show']).middleware(authMiddleware).name('profile')
-import { Router, type RequestHandler } from 'express';
+import { Router, type NextFunction, type RequestHandler } from 'express';
+import { sendResult } from '../response/index.js';
 import { Middleware } from './Middleware.js';
 import { normalize, RouteRegistry } from './RouteRegistry.js';
 import type {
   GroupOptions,
+  HandlerFunction,
   HttpMethod,
   MiddlewareLike,
   RouteAction,
@@ -90,20 +92,39 @@ export interface ResourceOptions {
   param?: string;
 }
 
-/** Turns a RouteHandler into a plain Express handler. */
+/** Turns a RouteHandler into a plain Express handler that sends whatever the handler returns. */
 function resolveHandler(definition: RouteDefinition): RequestHandler {
   const { handler } = definition;
-  if (!Array.isArray(handler)) return handler;
+  let call: HandlerFunction;
 
-  const [controller, method] = handler;
-  const action = (controller as Record<string, unknown>)[method];
+  if (Array.isArray(handler)) {
+    const [controller, method] = handler;
+    const action = (controller as Record<string, unknown>)[method];
 
-  if (typeof action !== 'function') {
-    throw new Error(`Route ${definition.uri}: ${controller.constructor.name} has no method "${String(method)}".`);
+    if (typeof action !== 'function') {
+      throw new Error(`Route ${definition.uri}: ${controller.constructor.name} has no method "${String(method)}".`);
+    }
+
+    // Keeps `this` working inside controller methods.
+    call = (req, res, next) => action.call(controller, req, res, next);
+  } else {
+    call = handler;
   }
 
-  // Keeps `this` working inside controller methods.
-  return (req, res, next) => action.call(controller, req, res, next) as void | Promise<void>;
+  return async (req, res, next) => {
+    let forwarded = false;
+    const forward = ((arg?: unknown) => {
+      forwarded = true;
+      next(arg as never);
+    }) as NextFunction;
+
+    try {
+      const result = await call(req, res, forward);
+      if (!forwarded) await sendResult(res, result);
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 
 function constraintGuard(constraints: Record<string, RegExp>): RequestHandler | undefined {

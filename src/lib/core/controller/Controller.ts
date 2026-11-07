@@ -1,7 +1,8 @@
 // controller/Controller.ts
 // Base class for files in src/controllers. Generate one with:  artisan make:controller Wallet --resource
-import type { Request, Response } from 'express';
+import type { Request } from 'express';
 import HttpError from '../../error.js';
+import { Reply } from '../response/index.js';
 import type { Paginated } from '../query/types.js';
 import type { Attributes, Data, Messages, Rules } from '../validation/types.js';
 import Validator from '../validation/Validator.js';
@@ -43,27 +44,22 @@ export abstract class Controller {
     return { page: Math.max(1, page), perPage: Math.min(max, Math.max(1, perPage)) };
   }
 
-  // ---- output ---------------------------------------------------------------------------
-  protected respond(res: Response, status: number, message: string, data?: unknown, extra: Record<string, unknown> = {}): Response {
-    return res.status(status).json({ message, ...(data !== undefined && { data }), ...extra });
+  // ---- output (return these from your methods) -------------------------------------------
+  protected ok(data?: unknown, message = 'ok'): Reply {
+    return Reply.success(data, message);
   }
 
-  protected ok(res: Response, data?: unknown, message = 'ok'): Response {
-    return this.respond(res, 200, message, data);
+  protected created(data?: unknown, message = 'created'): Reply {
+    return Reply.success(data, message, 201);
   }
 
-  protected created(res: Response, data?: unknown, message = 'created'): Response {
-    return this.respond(res, 201, message, data);
-  }
-
-  protected noContent(res: Response): Response {
-    return res.status(204).end();
+  protected noContent(): Reply {
+    return Reply.noContent();
   }
 
   /** Sends the result of query.paginate() as { message, data, meta }. */
-  protected paginated(res: Response, page: Paginated<unknown>, message = 'ok'): Response {
-    const { data, ...meta } = page;
-    return this.respond(res, 200, message, data, { meta });
+  protected paginated(page: Paginated<unknown>, message = 'ok'): Reply {
+    return Reply.paginated(page, message);
   }
 
   // ---- errors ---------------------------------------------------------------------------
