@@ -10,7 +10,7 @@ const db =  new Sequelize(
     host: DB_HOST as string,
     port: Number(DB_PORT),
     dialect: "mysql", // MariaDB (XAMPP) works fine with the mysql dialect
-    logging: console.log,
+    logging: false,
   }
 );
 

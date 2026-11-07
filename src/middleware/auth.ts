@@ -1,18 +1,18 @@
 // backend/src/middleware/auth.ts
 import type { Request, Response, NextFunction } from "express";
-import { web_token } from "../lib/jwt.js";
+import Auth from "../lib/auth/index.js";
+import HttpError from "../lib/error.js";
+// import { HttpError } from "../errors/HttpError.js";
 
-export function authMiddleware(req: Request, res: Response, next: NextFunction) {
-  const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) {
-    return res.status(401).json({ message: "Missing token" });
-  }
-
+export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   try {
-    const payload = web_token.verifyToken(header.slice(7));
-    res.locals.userId = payload.userId;
+    const user = await Auth.user();
+    if (!user) return next(HttpError.unauthorized("Invalid or expired token"));
+    // console.log(user)
+    req.user = user;
+    res.locals.userId = String(user.id); // keeps existing code that reads res.locals.userId working
     next();
-  } catch {
-    return res.status(401).json({ message: "Invalid or expired token" });
+  } catch (err) {
+    next(err);
   }
 }

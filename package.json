@@ -9,6 +9,7 @@
   "scripts": {
     "start": "node src/server.ts",
     "dev": "nodemon",
+    "artisan": "tsx src/lib/core/artisan.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
@@ -20,6 +21,7 @@
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.12.1",
     "mysql2": "^3.24.6",
+    "nodemailer": "^10.3.1",
     "sequelize": "^6.37.8",
     "tsx": "^4.23.15"
   },

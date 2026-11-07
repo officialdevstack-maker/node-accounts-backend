@@ -14,7 +14,7 @@ import type {
   Rules,
 } from "./types.js";
 import { defaultMessages, FALLBACK_MESSAGE } from "./message.js";
-import HttpError from "../error.js";
+import HttpError from "../../error.js";
 
 const MARKERS = new Set(["bail", "nullable", "sometimes"]);
 const REGEX_RULES = new Set(["regex", "not_regex"]); // their params may contain commas

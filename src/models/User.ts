@@ -8,6 +8,13 @@ import bcrypt from "bcryptjs"
 export class User extends Model {
   // `declare` stops TS class fields from shadowing Sequelize's getters/setters
   declare id: number
+  declare fullname: string
+  declare name: string
+  declare email: string
+  declare password: string
+  declare phone: string | null
+  declare isVerified: boolean
+  declare account_type: 'user' | 'business' | 'developer'
   declare firstName: string
   declare lastName: string | null
 
@@ -27,6 +34,10 @@ export class User extends Model {
             allowNull: true,
         },
 
+        isVerified: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false
+        },
 
         account_type: {
             type: DataTypes.ENUM("user", "business" , "developer"),

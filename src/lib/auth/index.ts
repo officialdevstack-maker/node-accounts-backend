@@ -1,71 +1,80 @@
-// app/Auth/Auth.ts
+// lib/auth/index.ts
 import { AsyncLocalStorage } from "async_hooks";
+import { createHash, randomBytes } from "crypto";
 import type { NextFunction, Request, Response } from "express";
-import jwt from "jsonwebtoken";
-import type { JwtPayload, SignOptions } from "jsonwebtoken";
 import bcrypt from "bcryptjs";
-import type { WhereOptions } from "sequelize";
+import { Op, type WhereOptions } from "sequelize";
 
 import { User } from "../../models/User.js";
-import { SESSION_KEY as JWT_SECRET } from "../../config/env.js";
+import { AccessToken } from "../../models/AccessToken.js";
+// import { AccessToken } from "../../models/AccessToken.js";
 
-if (!JWT_SECRET) {
-  throw new Error("SESSION_KEY is not set in config/env");
-}
-
-const SECRET: string = JWT_SECRET;
 const COOKIE_NAME = "auth_token";
-const REMEMBER_MS = 30 * 24 * 60 * 60 * 1000;
+const SHORT_MS = 2 * 60 * 60 * 1000;           // 2 hours
+const REMEMBER_MS = 30 * 24 * 60 * 60 * 1000;  // 30 days
 
 export type Credentials = {
   password: string;
   [field: string]: unknown;
 };
 
+const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 const storage = new AsyncLocalStorage<Guard>();
 
-/**
- * Per-request guard. One instance is created for every request.
- */
 export class Guard {
   private _user: User | null = null;
   private _resolved = false;
+  private _issuedToken: string | null = null; // plain token, only exists on the request that created it
 
   constructor(
     private readonly req: Request,
     private readonly res: Response
   ) {}
 
-  // Auth.attempt({ email, password }, remember)
-  async attempt(credentials: Credentials, remember = false): Promise<boolean> {
-    const { password, ...where } = credentials;
-    const user = await User.scope("withPassword").findOne({
-      where: where as WhereOptions,
+  /** Reads the token from "Authorization: Bearer xxx", falling back to the cookie. */
+  private extractToken(): string | null {
+    const header = this.req.headers.authorization;
+    if (header?.startsWith("Bearer ")) return header.slice(7).trim() || null;
+    return this.req.cookies?.[COOKIE_NAME] ?? null;
+  }
+
+  /** Creates a token row and returns the plain token (shown once, never stored). */
+  async createToken(user: User, remember = false): Promise<string> {
+    const plain = randomBytes(40).toString("hex");
+    
+    // lib/auth/index.ts  (temporary debug line, inside Guard.user(), right after `if (!plain) return null;`)
+    console.log("incoming token:", plain, "-> hash:", sha256(plain));
+
+    await AccessToken.create({
+      userId: user.id,
+      tokenHash: sha256(plain),
+      expiresAt: new Date(Date.now() + (remember ? REMEMBER_MS : SHORT_MS)),
     });
 
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return false;
-    }
+
+    return plain;
+  }
+
+  async attempt(credentials: Credentials, remember = false): Promise<boolean> {
+    const { password, ...where } = credentials;
+    const user = await User.scope("withPassword").findOne({ where: where as WhereOptions });
+
+    if (!user || !(await bcrypt.compare(password, user.password))) return false;
 
     await this.login(user, remember);
     return true;
   }
 
-  // Auth.login(user, remember)
   async login(user: User, remember = false): Promise<User | null> {
-    const expiresIn = (
-      remember
-        ? process.env.JWT_REMEMBER_EXPIRES_IN || "30d"
-        : process.env.JWT_EXPIRES_IN || "2h"
-    ) as SignOptions["expiresIn"];
+    const token = await this.createToken(user, remember);
+    this._issuedToken = token;
 
-    const token = jwt.sign({ sub: String(user.id) }, SECRET, { expiresIn });
-
+    // Optional: also set a cookie for browser clients. Remove if you only use Bearer tokens.
     this.res.cookie(COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      maxAge: remember ? REMEMBER_MS : undefined, // session cookie if not remembered
+      maxAge: remember ? REMEMBER_MS : undefined,
     });
 
     this._user = await User.findByPk(user.id); // fresh copy without password
@@ -73,19 +82,30 @@ export class Guard {
     return this._user;
   }
 
-  // Auth.user()
+  /** The plain token created during this request (register/login). Null otherwise. */
+  token(): string | null {
+    return this._issuedToken;
+  }
+
   async user(): Promise<User | null> {
     if (this._resolved) return this._user;
     this._resolved = true;
 
-    const token: string | undefined = this.req.cookies?.[COOKIE_NAME];
-    if (!token) return null;
+    const plain = this.extractToken();
+    if (!plain) return null;
 
-    try {
-      const payload = jwt.verify(token, SECRET) as JwtPayload;
-      this._user = payload.sub ? await User.findByPk(Number(payload.sub)) : null;
-    } catch {
-      this._user = null;
+    const record = await AccessToken.findOne({
+      where: {
+        tokenHash: sha256(plain),
+        [Op.or]: [{ expiresAt: null }, { expiresAt: { [Op.gt]: new Date() } }],
+      },
+    });
+    if (!record) return null;
+
+    this._user = await User.findByPk(record.userId);
+    if (this._user) {
+      record.lastUsedAt = new Date();
+      void record.save().catch(() => {}); // don't block the request on this
     }
     return this._user;
   }
@@ -103,44 +123,50 @@ export class Guard {
     return user ? user.id : null;
   }
 
-  // Auth.logout()
-  logout(): void {
+  /** Revokes the current token (now async). */
+  async logout(): Promise<void> {
+    const plain = this.extractToken();
+    if (plain) await AccessToken.destroy({ where: { tokenHash: sha256(plain) } });
+
+    this.res.clearCookie(COOKIE_NAME);
+    this._user = null;
+    this._issuedToken = null;
+    this._resolved = true;
+  }
+
+  /** Revokes every token the user has (log out of all devices). */
+  async logoutAll(): Promise<void> {
+    const id = await this.id();
+    if (id) await AccessToken.destroy({ where: { userId: id } });
+
     this.res.clearCookie(COOKIE_NAME);
     this._user = null;
     this._resolved = true;
   }
 }
 
-/**
- * Static facade, so you can write Auth.user() anywhere during a request.
- */
 export class Auth {
   private static guard(): Guard {
     const guard = storage.getStore();
-    if (!guard) {
-      throw new Error("Auth used outside a request. Did you register Auth.initialize?");
-    }
+    if (!guard) throw new Error("Auth used outside a request. Did you register Auth.initialize?");
     return guard;
   }
 
-  // Register once in app.ts: app.use(Auth.initialize)
   static initialize(req: Request, res: Response, next: NextFunction): void {
     const guard = new Guard(req, res);
-    req.auth = guard; // also available as req.auth
+    req.auth = guard;
     storage.run(guard, next);
   }
 
-  static attempt(credentials: Credentials, remember?: boolean) {
-    return Auth.guard().attempt(credentials, remember);
-  }
-  static login(user: User, remember?: boolean) {
-    return Auth.guard().login(user, remember);
-  }
+  static attempt(credentials: Credentials, remember?: boolean) { return Auth.guard().attempt(credentials, remember); }
+  static login(user: User, remember?: boolean) { return Auth.guard().login(user, remember); }
+  static token() { return Auth.guard().token(); }
   static user() { return Auth.guard().user(); }
   static check() { return Auth.guard().check(); }
   static guest() { return Auth.guard().guest(); }
   static id() { return Auth.guard().id(); }
   static logout() { return Auth.guard().logout(); }
+  static logoutAll() { return Auth.guard().logoutAll(); }
 }
 
 export default Auth;

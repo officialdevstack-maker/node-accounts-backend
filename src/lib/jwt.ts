@@ -14,6 +14,7 @@ class JWT {
     }
 
     verifyToken(token: string): TokenPayload {
+        console.log(token)
         return jwt.verify(token, JWT_SECRET as string, { algorithms: ["HS256"] }) as TokenPayload;
     }
 }

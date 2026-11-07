@@ -8,6 +8,7 @@ import { apiV1Route } from "./routes/index.js";
 import db from "./lib/database.js";
 import Auth from "./lib/auth/index.js";
 import { errorHandler, notFound } from "./middleware/error.js";
+import { initDatabaseNotification } from "./lib/core/notifications/index.js";
 
 const app = express();
 
@@ -18,8 +19,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(Auth.initialize); // must come after cookieParser
+initDatabaseNotification(db)
 
 // 2. routes
+app.get("/", (req, res) => {
+  return res.json({ message: "default page/api" })
+})
+
 app.use("/api", apiV1Route);
 
 // 3. these two must be last
@@ -32,6 +38,7 @@ async function bootstrap() {
     await db.authenticate();
     await db.sync();
 
+    
     app.listen(PORT, () => {
       console.log(`Backend server is running on port ${PORT}`);
     });

@@ -1,7 +1,7 @@
 // middleware/validateRequest.ts
 import type { NextFunction, Request, Response } from "express";
-import type { Attributes, Messages, Rules } from "../lib/validation/types.js";
-import Validator from "../lib/validation/Validator.js";
+import type { Attributes, Messages, Rules } from "../lib/core/validation/types.js";
+import Validator from "../lib/core/validation/Validator.js";
 // import { Validator } from "../validation/Validator.js";
 // import type { Attributes, Messages, Rules } from "../validation/types.js";
 

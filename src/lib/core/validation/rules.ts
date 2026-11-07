@@ -4,7 +4,7 @@ import { QueryTypes } from "sequelize";
 // import db from "../config/database.js";
 import { getByPath, hasPath, isBlank } from "./helpers.js";
 import type { Data, RuleSpec } from "./types.js";
-import db from "../database.js";
+import db from "../../database.js";
 
 const str = (v: unknown) => String(v);
 

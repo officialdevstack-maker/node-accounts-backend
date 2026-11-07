@@ -6,6 +6,6 @@ export const authRouter = Router()
 
 authRouter.post("/login", authenticationController.create)
 
-authRouter.post('/logout', authenticationController.delete);
+authRouter.get('/logout', authMiddleware, authenticationController.delete);
 
 authRouter.get("/profile", authMiddleware, authenticationController.show)
