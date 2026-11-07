@@ -48,6 +48,11 @@ export class Schema {
     await this.drop(table);
   }
 
+  /** DROP every table in the database. */
+  async dropAllTables(): Promise<void> {
+    await this.queryInterface.dropAllTables();
+  }
+
   async rename(from: string, to: string): Promise<void> {
     await this.queryInterface.renameTable(from, to);
   }

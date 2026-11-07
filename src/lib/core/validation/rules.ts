@@ -1,10 +1,8 @@
 // validation/rules.ts
 import { isIP } from "net";
-import { QueryTypes } from "sequelize";
-// import db from "../config/database.js";
+import { DB } from "../query/index.js";
 import { getByPath, hasPath, isBlank } from "./helpers.js";
 import type { Data, RuleSpec } from "./types.js";
-import db from "../../database.js";
 
 const str = (v: unknown) => String(v);
 
@@ -55,7 +53,7 @@ const dateRule =
 const IDENT = /^[A-Za-z0-9_]+$/;
 const ident = (name: string) => {
   if (!IDENT.test(name)) throw new Error(`Invalid SQL identifier "${name}" in validation rule.`);
-  return `\`${name}\``;
+  return name;
 };
 const isNull = (v?: string) => v === undefined || v === "" || v.toUpperCase() === "NULL";
 
@@ -65,21 +63,12 @@ async function countRows(
   value: unknown,
   ignore?: { id: string; column: string }
 ): Promise<number> {
-  let sql = `SELECT COUNT(*) AS total FROM ${ident(table)} WHERE ${ident(column)} = :value`;
-  const replacements: Record<string, unknown> = {
-    value: typeof value === "number" ? value : str(value),
-  };
-
-  if (ignore) {
-    sql += ` AND ${ident(ignore.column)} <> :ignore`;
-    replacements.ignore = ignore.id;
-  }
-
-  const rows = await db.query<{ total: number | string }>(sql, {
-    replacements,
-    type: QueryTypes.SELECT,
-  });
-  return Number(rows[0]?.total ?? 0);
+  return DB.table(ident(table))
+    .where(ident(column), typeof value === "number" ? value : str(value))
+    .when(ignore, (q, i) => {
+      if (i) q.where(ident(i.column), "<>", i.id);
+    })
+    .count();
 }
 
 const lastSegment = (attribute: string) => attribute.split(".").pop() as string;

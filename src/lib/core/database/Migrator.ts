@@ -1,10 +1,12 @@
 // database/Migrator.ts
 // Finds migration files, remembers which ones ran (in the `migrations` table), and runs / reverts them in batches.
+// Bookkeeping goes through the query builder (DB) and the migrations table is created with Schema.
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { DataTypes, type Model, type ModelStatic, type Sequelize } from 'sequelize';
+import type { Sequelize } from 'sequelize';
 import { config } from '../config/index.js';
+import { Connection } from '../query/Connection.js';
 import { Migration } from './Migration.js';
 import { databasePath } from './paths.js';
 import { Schema } from './Schema.js';
@@ -53,28 +55,21 @@ export class MigrationError extends Error {
 
 export class Migrator {
   private readonly dir: string;
-  private readonly record: ModelStatic<Model>;
+  private readonly table: string;
+  private readonly db: Connection;
   private readonly schema: Schema;
   private readonly onEvent: ((event: MigratorEvent) => void) | undefined;
+  private tableReady = false;
 
   constructor(
     sequelize: Sequelize,
     options: MigratorOptions = {},
   ) {
-    const table = options.table ?? config('database.migrationsTable');
+    this.table = options.table ?? config('database.migrationsTable');
     this.dir = options.dir ?? databasePath('migrations');
     this.onEvent = options.onEvent;
     this.schema = new Schema(sequelize);
-
-    this.record = sequelize.define(
-      `Migrator_${table}`,
-      {
-        id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-        migration: { type: DataTypes.STRING(255), allowNull: false, unique: true },
-        batch: { type: DataTypes.INTEGER, allowNull: false },
-      },
-      { tableName: table, timestamps: false },
-    );
+    this.db = new Connection(sequelize);
   }
 
   // ---- reading ---------------------------------------------------------------------------
@@ -96,11 +91,8 @@ export class Migrator {
   /** Migrations already applied, in the order they ran. */
   async ran(): Promise<RanMigration[]> {
     await this.ensureTable();
-    const rows = (await this.record.findAll({ order: [['batch', 'ASC'], ['id', 'ASC']], raw: true })) as unknown as Array<{
-      migration: string;
-      batch: number;
-    }>;
-    return rows.map((r) => ({ name: r.migration, batch: Number(r.batch) }));
+    const rows = await this.db.table(this.table).orderBy('batch').orderBy('id').get();
+    return rows.map((r) => ({ name: String(r.migration), batch: Number(r.batch) }));
   }
 
   async pending(): Promise<MigrationFile[]> {
@@ -145,7 +137,7 @@ export class Migrator {
         throw new MigrationError(file.name, 'up', error);
       }
 
-      await this.record.create({ migration: file.name, batch });
+      await this.db.table(this.table).insert({ migration: file.name, batch });
       this.onEvent?.({ type: 'migrated', name: file.name, ms: Date.now() - started });
       ran.push(file.name);
 
@@ -176,7 +168,8 @@ export class Migrator {
 
   /** Drop every table in the database (including the migrations table). Follow it with run(). */
   async wipe(): Promise<void> {
-    await this.schema.queryInterface.dropAllTables();
+    await this.schema.dropAllTables();
+    this.tableReady = false;
   }
 
   // ---- internals -------------------------------------------------------------------------
@@ -201,7 +194,7 @@ export class Migrator {
         throw new MigrationError(target.name, 'down', error);
       }
 
-      await this.record.destroy({ where: { migration: target.name } });
+      await this.db.table(this.table).where('migration', target.name).delete();
       this.onEvent?.({ type: 'reverted', name: target.name, ms: Date.now() - started });
       reverted.push(target.name);
     }
@@ -219,11 +212,21 @@ export class Migrator {
   }
 
   private async lastBatch(): Promise<number> {
-    const ran = await this.ran();
-    return ran.length ? Math.max(...ran.map((r) => r.batch)) : 0;
+    await this.ensureTable();
+    return Number((await this.db.table(this.table).max('batch')) ?? 0);
   }
 
+  /** CREATE TABLE IF NOT EXISTS, same columns the old Sequelize model produced. */
   private async ensureTable(): Promise<void> {
-    await this.record.sync(); // CREATE TABLE IF NOT EXISTS
+    if (this.tableReady) return;
+
+    if (!(await this.schema.hasTable(this.table))) {
+      await this.schema.create(this.table, (t) => {
+        t.id();
+        t.string('migration', 255).unique();
+        t.integer('batch');
+      });
+    }
+    this.tableReady = true;
   }
 }
