@@ -5,21 +5,29 @@ import { pluralize, toSnake } from '../database/support.js';
 import { DB, type Row } from '../query/index.js';
 import type { Connection } from '../query/Connection.js';
 import { castGet, castSet, type Cast } from './casts.js';
-import { ModelQuery } from './ModelQuery.js';
+import { ModelQuery, type EagerSpec, type GlobalScope, type LocalScope } from './ModelQuery.js';
+import { BelongsTo, HasMany, HasOne, Relation } from './Relation.js';
 import { same, snapshot, toCamel } from './support.js';
 
 type Attributes = Record<string, unknown>;
 const reverseColumns = new WeakMap<typeof Model, Map<string, string>>();
 const warnedUncastModels = new WeakSet<typeof Model>();
+const studly = (key: string): string => key.charAt(0).toUpperCase() + key.slice(1);
 
 export interface ModelConstructor<T extends Model> {
   new (): T;
   readonly name: string;
   primaryKey: string;
+  timestamps: boolean;
   softDeletes: boolean;
+  createdAt: string;
+  updatedAt: string;
   deletedAt: string;
   casts: Record<string, Cast>;
+  scopes: Record<string, LocalScope>;
+  globalScopes(): Record<string, GlobalScope>;
   columnFor(attribute: string): string;
+  attributeFor(column: string): string;
   tableName(): string;
 }
 
@@ -33,7 +41,10 @@ export abstract class Model {
   static updatedAt = 'updated_at';
   static deletedAt = 'deleted_at';
   static fillable: string[] = [];
+  static guarded: string[] = ['*'];
   static hidden: string[] = [];
+  static appends: string[] = [];
+  static scopes: Record<string, LocalScope> = {};
   static casts: Record<string, Cast> = {};
   static columns: Record<string, string> = {};
   static versionColumn: string | undefined = undefined;
@@ -67,11 +78,22 @@ export abstract class Model {
     if (overridden !== undefined) return overridden;
 
     const attribute = this.camelCase ? toCamel(column) : column;
-    // address_2, api_url and userID are known camel/snake mapping failure cases.
     if (this.camelCase && this.columnFor(attribute) !== column && this.columns[attribute] === undefined) {
       throw new Error(`Column "${column}" cannot be mapped reversibly. Add it to static columns or set camelCase = false.`);
     }
     return attribute;
+  }
+
+  static globalScopes(): Record<string, GlobalScope> {
+    return this.softDeletes ? { softDeletes: (query, model) => { query.whereNull(model.deletedAt); } } : {};
+  }
+
+  static isFillable(attribute: string): boolean {
+    if (this.fillable.includes(attribute)) return true;
+    const blocked = this.guarded.includes(attribute);
+    if (this.fillable.includes('*')) return !blocked;
+    if (this.fillable.length) return false;
+    return !this.guarded.includes('*') && !blocked;
   }
 
   static query<T extends Model>(this: ModelConstructor<T>): ModelQuery<T> {
@@ -89,8 +111,24 @@ export abstract class Model {
     return new ModelQuery(this).get();
   }
 
+  static with<T extends Model>(this: ModelConstructor<T>, ...relations: Array<EagerSpec | EagerSpec[]>): ModelQuery<T> {
+    return new ModelQuery(this).with(...relations);
+  }
+
   static find<T extends Model>(this: ModelConstructor<T>, id: string | number): Promise<T | null> {
     return new ModelQuery(this).find(id);
+  }
+
+  static firstOrNew<T extends Model>(this: ModelConstructor<T>, attributes: Attributes, values: Attributes = {}): Promise<T> {
+    return new ModelQuery(this).firstOrNew(attributes, values);
+  }
+
+  static firstOrCreate<T extends Model>(this: ModelConstructor<T>, attributes: Attributes, values: Attributes = {}): Promise<T> {
+    return new ModelQuery(this).firstOrCreate(attributes, values);
+  }
+
+  static updateOrCreate<T extends Model>(this: ModelConstructor<T>, attributes: Attributes, values: Attributes = {}): Promise<T> {
+    return new ModelQuery(this).updateOrCreate(attributes, values);
   }
 
   static findOrFail<T extends Model>(
@@ -116,6 +154,7 @@ export abstract class Model {
   $exists!: boolean;
   $secrets!: Attributes;
   $loadedHidden!: boolean;
+  $relations!: Record<string, Model | Model[] | null>;
 
   constructor() {
     Object.defineProperties(this, {
@@ -125,18 +164,23 @@ export abstract class Model {
       $exists: { value: false, writable: true, configurable: true, enumerable: false },
       $secrets: { value: {}, writable: true, configurable: true, enumerable: false },
       $loadedHidden: { value: false, writable: true, configurable: true, enumerable: false },
+      $relations: { value: {}, writable: true, configurable: true, enumerable: false },
     });
 
     return new Proxy(this, {
-      get: (target, prop, receiver) =>
-        typeof prop === 'symbol' || prop in target ? Reflect.get(target, prop, receiver) : target.$attributes[prop],
-      set: (target, prop, value) => {
+      get: (target, prop, receiver) => {
+        if (typeof prop === 'symbol') return Reflect.get(target, prop, receiver);
+        if (Object.prototype.hasOwnProperty.call(target.$relations, prop)) return target.$relations[prop];
+        if (prop in target) return Reflect.get(target, prop, receiver);
+        return target.$getAttribute(prop, receiver);
+      },
+      set: (target, prop, value, receiver) => {
         if (typeof prop === 'symbol') return Reflect.set(target, prop, value);
         if (prop in target) {
           target.$assertNotReserved(prop);
           return Reflect.set(target, prop, value);
         }
-        target.$attributes[prop] = castGet(target.$model().casts[prop], value);
+        target.$setAttribute(prop, value, receiver);
         return true;
       },
       has: (target, prop) =>
@@ -170,6 +214,7 @@ export abstract class Model {
     const model = this.$model();
     this.$attributes = {};
     this.$secrets = {};
+    this.$relations = {};
     this.$loadedHidden = withHidden;
     const hidden = new Set(model.hidden);
     for (const [column, value] of Object.entries(row)) {
@@ -190,13 +235,9 @@ export abstract class Model {
 
   fill(data: Attributes): this {
     const model = this.$model();
-    const { fillable } = model;
-    const all = fillable.includes('*');
     for (const [key, value] of Object.entries(data)) {
       this.$assertNotReserved(key);
-      if (all || fillable.includes(key)) {
-        this.$attributes[key] = castGet(model.casts[key], value);
-      }
+      if (model.isFillable(key)) this.$setAttribute(key, value);
     }
     return this;
   }
@@ -204,7 +245,7 @@ export abstract class Model {
   forceFill(data: Attributes): this {
     for (const [key, value] of Object.entries(data)) {
       this.$assertNotReserved(key);
-      this.$attributes[key] = castGet(this.$model().casts[key], value);
+      this.$setAttribute(key, value);
     }
     return this;
   }
@@ -383,6 +424,7 @@ export abstract class Model {
     const connection = DB.connection();
     const column = model.columnFor(attribute);
     const extraRow = this.$toRow(extra);
+    if (model.timestamps && !(model.updatedAt in extraRow)) extraRow[model.updatedAt] = new Date();
     const query = connection.table(model.tableName()).where(model.primaryKey, this.getKey());
     if (direction === '+') await query.increment(column, amount, extraRow);
     else await query.decrement(column, amount, extraRow);
@@ -404,22 +446,92 @@ export abstract class Model {
     return this;
   }
 
+  $getAttribute(key: string, receiver: object = this): unknown {
+    const accessor: unknown = Reflect.get(this.$model().prototype, `get${studly(key)}Attribute`);
+    const raw = this.$attributes[key];
+    return typeof accessor === 'function' ? accessor.call(receiver, raw) : raw;
+  }
+
+  $setAttribute(key: string, value: unknown, receiver: object = this): void {
+    const mutator: unknown = Reflect.get(this.$model().prototype, `set${studly(key)}Attribute`);
+    const next = typeof mutator === 'function' ? mutator.call(receiver, value) : value;
+    this.$attributes[key] = castGet(this.$model().casts[key], next);
+  }
+
+  protected hasMany<R extends Model>(related: ModelConstructor<R>, foreignKey?: string, localKey?: string): HasMany<R> {
+    const model = this.$model();
+    return new HasMany(this, related, foreignKey ?? `${toSnake(model.name)}_${model.primaryKey}`, localKey ?? model.primaryKey);
+  }
+
+  protected hasOne<R extends Model>(related: ModelConstructor<R>, foreignKey?: string, localKey?: string): HasOne<R> {
+    const model = this.$model();
+    return new HasOne(this, related, foreignKey ?? `${toSnake(model.name)}_${model.primaryKey}`, localKey ?? model.primaryKey);
+  }
+
+  protected belongsTo<R extends Model>(related: ModelConstructor<R>, foreignKey?: string, ownerKey?: string): BelongsTo<R> {
+    return new BelongsTo(this, related, foreignKey ?? `${toSnake(related.name)}_${related.primaryKey}`, ownerKey ?? related.primaryKey);
+  }
+
+  relation(name: string): Relation<any> {
+    const model = this.$model();
+    const factory: unknown = Reflect.get(model.prototype, name);
+    if (typeof factory !== 'function') throw new Error(`Relation "${name}" is not defined on ${model.name}.`);
+
+    const relation: unknown = factory.call(this);
+    if (!(relation instanceof Relation)) throw new Error(`${model.name}.${name}() must return hasMany(), hasOne() or belongsTo().`);
+    return relation;
+  }
+
+  setRelation(name: string, value: Model | Model[] | null): this {
+    this.$relations[name] = value;
+    return this;
+  }
+
+  relationLoaded(name: string): boolean {
+    return Object.prototype.hasOwnProperty.call(this.$relations, name);
+  }
+
+  async load(...relations: Array<EagerSpec | EagerSpec[]>): Promise<this> {
+    const query = new ModelQuery(this.$model() as unknown as ModelConstructor<Model>).with(...relations);
+    await query.loadRelationsFor([this]);
+    return this;
+  }
+
+  async touch(attribute?: string): Promise<boolean> {
+    const model = this.$model();
+    if (!this.$exists || !model.timestamps) return false;
+
+    const column = attribute ? model.columnFor(attribute) : model.updatedAt;
+    const key = model.attributeFor(column);
+    const now = new Date();
+    await DB.table(model.tableName()).where(model.primaryKey, this.getKey()).update({ [column]: now });
+
+    this.$attributes[key] = now;
+    this.$original[key] = snapshot(now);
+    return true;
+  }
+
   async forceDelete(): Promise<boolean> {
     if (!this.$exists) return false;
     const model = this.$model();
+    if (await this.$fire('forceDeleting') === false) return false;
     await DB.table(model.tableName()).where(model.primaryKey, this.getKey()).delete();
     this.$exists = false;
+    await this.$fire('forceDeleted');
     return true;
   }
 
   async restore(): Promise<this> {
     const model = this.$model();
     if (!model.softDeletes) return this;
+    if (await this.$fire('restoring') === false) return this;
+
     await DB.table(model.tableName()).where(model.primaryKey, this.getKey()).update({ [model.deletedAt]: null });
     const attribute = model.attributeFor(model.deletedAt);
     this.$attributes[attribute] = null;
     this.$original = snapshot(this.$attributes);
     this.$changes = { [attribute]: null };
+    await this.$fire('restored');
     return this;
   }
 
@@ -427,12 +539,27 @@ export abstract class Model {
     const model = this.$model();
     const row = await DB.table(model.tableName()).where(model.primaryKey, this.getKey()).first();
     if (!row) throw HttpError.notFound(`${model.name} not found.`);
-    return this.$hydrate(row);
+
+    const loaded = Object.keys(this.$relations);
+    this.$hydrate(row, this.$loadedHidden);
+    if (loaded.length) await this.load(...loaded);
+    return this;
   }
 
   toObject(): Attributes {
-    const hidden = new Set(this.$model().hidden);
-    return Object.fromEntries(Object.entries(this.$attributes).filter(([key]) => !hidden.has(key)));
+    const model = this.$model();
+    const hidden = new Set(model.hidden);
+    const out: Attributes = {};
+
+    for (const key of Object.keys(this.$attributes)) {
+      if (!hidden.has(key)) out[key] = this.$getAttribute(key, this);
+    }
+    for (const key of model.appends) out[key] = this.$getAttribute(key, this);
+    for (const [name, value] of Object.entries(this.$relations)) {
+      if (hidden.has(name)) continue;
+      out[name] = Array.isArray(value) ? value.map((m) => m.toObject()) : value ? value.toObject() : null;
+    }
+    return out;
   }
 
   toJSON(): Attributes {
@@ -471,7 +598,7 @@ export abstract class Model {
     console.warn(`Model ${model.name} hydrated uncast column "${attribute}" with a ${suspiciousBoolean ? '0/1 value' : 'date-like string'}. Declare a cast for this attribute.`);
   }
 
-  private async $fire(event: 'saving' | 'saved' | 'creating' | 'created' | 'updating' | 'updated' | 'deleting' | 'deleted'): Promise<unknown> {
+  private async $fire(event: 'saving' | 'saved' | 'creating' | 'created' | 'updating' | 'updated' | 'deleting' | 'deleted' | 'restoring' | 'restored' | 'forceDeleting' | 'forceDeleted'): Promise<unknown> {
     const hook: unknown = Reflect.get(this, event);
     if (typeof hook === 'function') return hook.call(this);
   }

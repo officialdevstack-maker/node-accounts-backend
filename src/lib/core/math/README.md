@@ -3,7 +3,7 @@
 No dependencies. JavaScript floats give `0.1 + 0.2 = 0.30000000000000004`, so wallet and fee maths goes through `Decimal` (BigInt underneath).
 
 ```ts
-import { Decimal, dec, Num, evaluate } from '../lib/core/math/index.js';
+import { Decimal, dec, Num, uuid, evaluate } from '../lib/core/math/index.js';
 
 dec('0.1').add('0.2').toString();                       // '0.3'
 dec(1500).percent(7.5).toString();                      // '112.5'   (7.5% of 1500)
@@ -13,6 +13,8 @@ dec(100).allocate([1, 1, 1]).map(String);               // ['33.34', '33.33', '3
 dec('2.5').round(0, 'half-even').toString();            // '2'
 
 Num.round(1.005, 2);                                    // 1.01
+Num.random(1, 10);                                       // random number in [1, 10)
+uuid();                                                  // UUID v4
 Num.percentage(30, 120);                                // 25
 Num.percentChange(80, 100);                             // 25
 Num.avg([1, 2, 4]); Num.median([...]); Num.stdDev([...]);
