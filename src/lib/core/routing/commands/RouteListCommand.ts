@@ -4,11 +4,11 @@ import { pathToFileURL } from 'node:url';
 import { CliError, Command } from '../../cli/index.js';
 import { Middleware } from '../Middleware.js';
 import { describeAction, Route } from '../Route.js';
-import { normalize } from '../RouteRegistry.js';
+import { normalize, RouteRegistry } from '../RouteRegistry.js';
 
 export class RouteListCommand extends Command {
   readonly signature =
-    'route:list {--file= : Routes file to load (defaults to src/routes/api.ts in development or dist/routes/api.js in production)} {--prefix=/api : Path the router is mounted on} {--method= : Only this HTTP method} {--name= : Only names containing this text} {--path= : Only URIs containing this text} {--middleware= : Only routes using this middleware} {--json : Print JSON instead of a table}';
+    'route:list {--file= : Routes file to load (defaults to src/routes/api.ts in development or dist/routes/api.js in production)} {--set= : Only routes from this named set} {--prefix= : Override the path the router is mounted on} {--method= : Only this HTTP method} {--name= : Only names containing this text} {--path= : Only URIs containing this text} {--middleware= : Only routes using this middleware} {--json : Print JSON instead of a table}';
   readonly description = 'List every route declared with the Route facade';
 
   async handle(): Promise<number> {
@@ -19,22 +19,28 @@ export class RouteListCommand extends Command {
 
     await import(pathToFileURL(file).href); // declaring the routes fills the registry
 
-    const prefix = this.option('prefix') ?? '';
+    const set = this.option('set');
+    const prefix = this.option('prefix');
     const method = this.option('method')?.toUpperCase();
     const name = this.option('name');
     const path = this.option('path');
     const middleware = this.option('middleware');
 
     const rows = Route.all()
-      .map((route) => ({
-        method: route.methods.map((m) => m.toUpperCase()).join('|'),
-        uri: normalize(prefix, route.uri),
-        name: route.name ?? '',
-        action: describeAction(route.handler),
-        middleware: Middleware.without(route.middleware, route.excluded)
-          .map((m) => Middleware.describe(m))
-          .join(', '),
-      }))
+      .filter((route) => !set || RouteRegistry.setFor(route) === set)
+      .map((route) => {
+        const routeSet = RouteRegistry.setFor(route);
+        return {
+          set: routeSet,
+          method: route.methods.map((m) => m.toUpperCase()).join('|'),
+          uri: normalize(prefix ?? RouteRegistry.mountFor(routeSet) ?? '/api', route.uri),
+          name: route.name ?? '',
+          action: describeAction(route.handler),
+          middleware: Middleware.without(route.middleware, route.excluded)
+            .map((m) => Middleware.describe(m))
+            .join(', '),
+        };
+      })
       .filter((r) => !method || r.method.split('|').includes(method))
       .filter((r) => !name || r.name.includes(name))
       .filter((r) => !path || r.uri.includes(path))
@@ -51,8 +57,8 @@ export class RouteListCommand extends Command {
     }
 
     this.table(
-      ['Method', 'URI', 'Name', 'Action', 'Middleware'],
-      rows.map((r) => [r.method, r.uri, r.name, r.action, r.middleware]),
+      ['Set', 'Method', 'URI', 'Name', 'Action', 'Middleware'],
+      rows.map((r) => [r.set, r.method, r.uri, r.name, r.action, r.middleware]),
     );
     this.newLine();
     this.comment(`${rows.length} route${rows.length === 1 ? '' : 's'}.`);

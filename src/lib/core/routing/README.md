@@ -17,8 +17,14 @@ Route.group({ prefix: '/users', middleware: ['auth'], as: 'users.' }, () => {
   Route.resource('/', usersController);          // index, store, show, update, destroy
 });
 
+Route.prefix('/admin').prefix('/v1').name('admin.').where('id', /^\d+$/).middleware('auth').controller(adminController).group(() => {
+  Route.get('/stats/{id}', 'index').name('stats');
+});
+
 export const apiV1Route = Route.router();        // app.use('/api', apiV1Route)
 ```
+
+Object-form and fluent groups share the same options. Fluent prefixes and names accumulate; `Route.withoutMiddleware(...)` and `Route.name(...)` can start a group directly. Group `where` constraints are inherited and can be overridden on an individual route.
 
 ```bash
 npm run artisan -- route:list [--method=POST] [--name=auth] [--path=login] [--prefix=/api] [--file=src/routes/api.ts] [--middleware=auth] [--json]

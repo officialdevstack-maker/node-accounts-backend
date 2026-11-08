@@ -1,0 +1,10 @@
+export const toCamel = (value: string): string =>
+  value.replace(/_+([a-z0-9])/gi, (_match, char: string) => char.toUpperCase());
+
+export function same(a: unknown, b: unknown): boolean {
+  if (a instanceof Date && b instanceof Date) return a.getTime() === b.getTime();
+  if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+  return Object.is(a, b);
+}

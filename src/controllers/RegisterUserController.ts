@@ -14,6 +14,7 @@ class RegisterUserController extends Controller {
             phone: data.phone,
             password: data.password,
         })
+        await user.refresh()
         await Mail.to(user.email).send(new WelcomeMail(user));
 
         return this.ok({ auth: null, token: null, user }, "successfully registered");

@@ -21,7 +21,7 @@ class AuthenticationController extends Controller {
 
         const data = v.validated()
         const email = String(data.email).trim().toLowerCase()
-        const user = await User.findByEmailWithPassword(email)
+        const user = await User.findByEmail(email)
 
         if (!user || !(await bcrypt.compare(String(data.password), user.password))) {
             this.abort(401, 'Invalid email or password.', {

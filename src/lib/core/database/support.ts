@@ -8,6 +8,16 @@ export function pluralize(word: string): string {
   return `${word}s`;
 }
 
+/** 'categories' -> 'category', 'addresses' -> 'address', 'status' -> 'status' */
+export function singularize(word: string): string {
+  if (/ies$/i.test(word)) return `${word.slice(0, -3)}y`;
+  if (/sses$/i.test(word)) return word.slice(0, -2);
+  if (/(xes|zes|ches|shes)$/i.test(word)) return word.slice(0, -2);
+  if (/statuses$/i.test(word)) return word.slice(0, -2);
+  if (/(ss|us|is)$/i.test(word)) return word;
+  return word.replace(/s$/i, '');
+}
+
 /** 'UserProfile' | 'user-profile' | 'user profile' -> 'user_profile' */
 export const toSnake = (input: string): string =>
   input

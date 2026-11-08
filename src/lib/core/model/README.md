@@ -1,0 +1,28 @@
+# Model pack
+
+The model pack adds an active-record-style layer over the query builder and registers `make:model`.
+
+```ts
+import { Model, type Cast } from '../lib/core/model/index.js';
+
+export class User extends Model {
+  static table = 'users';
+  static fillable = ['fullname', 'email', 'password'];
+  static hidden = ['password'];
+  static casts: Record<string, Cast> = { isVerified: 'boolean' };
+
+  declare id: number;
+  declare fullname: string;
+  declare email: string;
+  declare password: string;
+  declare isVerified: boolean;
+  declare createdAt: Date;
+  declare updatedAt: Date;
+}
+
+const user = await User.where('email', 'ada@example.com').first();
+```
+
+Declare model attributes with `declare` so emitted class fields do not shadow the model's attribute proxy. Queries use database column names; model attributes and serialized object keys use camelCase by default. `hidden` attributes are omitted from `toObject()` and JSON serialization, while remaining available to application logic.
+
+Run `artisan make:model Wallet` to create a model under `src/models`. Use `--migration` to also create its table migration.

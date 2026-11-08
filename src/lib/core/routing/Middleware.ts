@@ -1,5 +1,6 @@
 import type { RequestHandler } from 'express';
 import type { MiddlewareLike } from './types.js';
+import { UrlSigner } from './UrlSigner.js';
 
 type Factory = (...params: string[]) => RequestHandler;
 
@@ -72,3 +73,5 @@ export class Middleware {
     return factory ? factory() : undefined;
   }
 }
+
+Middleware.alias('signed', () => UrlSigner.middleware());

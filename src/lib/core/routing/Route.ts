@@ -1,9 +1,12 @@
 // The facade:  Route.get('/profile', [controller, 'show']).middleware(authMiddleware).name('profile')
 import { Router, type NextFunction, type RequestHandler } from 'express';
+import HttpError from '../../error.js';
 import { FormRequest, HttpRequest } from '../request/index.js';
 import { sendResult } from '../response/index.js';
+import { singularize } from '../database/support.js';
 import { Middleware } from './Middleware.js';
 import { normalize, RouteRegistry } from './RouteRegistry.js';
+import { UrlSigner, type SignedUrlOptions } from './UrlSigner.js';
 import type {
   GroupOptions,
   HandlerFunction,
@@ -15,7 +18,7 @@ import type {
   RouteHandler,
 } from './types.js';
 
-const ALL_METHODS: HttpMethod[] = ['get', 'post', 'put', 'patch', 'delete'];
+const ALL_METHODS: HttpMethod[] = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -146,7 +149,7 @@ class GroupBuilder {
   private readonly options: GroupOptions = {};
 
   prefix(prefix: string): this {
-    this.options.prefix = prefix;
+    this.options.prefix = normalize(this.options.prefix ?? '', prefix);
     return this;
   }
 
@@ -162,13 +165,33 @@ class GroupBuilder {
     return this;
   }
 
+  where(param: string, pattern: RegExp): this;
+  where(match: Record<string, RegExp>): this;
+  where(param: string | Record<string, RegExp>, pattern?: RegExp): this {
+    if (typeof param === 'string') {
+      this.options.where = {
+        ...this.options.where,
+        [param]: new RegExp(pattern!.source, pattern!.flags.replace(/[gy]/g, '')),
+      };
+      return this;
+    }
+
+    Object.entries(param).forEach(([key, value]) => this.where(key, value));
+    return this;
+  }
+
   controller(controller: object): this {
     this.options.controller = controller;
     return this;
   }
 
   as(name: string): this {
-    this.options.as = name;
+    this.options.as = (this.options.as ?? '') + name;
+    return this;
+  }
+
+  name(name: string): this {
+    return this.as(name);
     return this;
   }
 
@@ -184,6 +207,8 @@ export interface ResourceOptions {
   except?: ResourceAction[];
   /** URL parameter name (default 'id') */
   param?: string;
+  /** URL parameter names for nested resource segments, e.g. { users: 'user' } */
+  parameters?: Record<string, string>;
   /** Request class per action: { store: StoreUserRequest, update: UpdateUserRequest } */
   requests?: Partial<Record<ResourceAction, RequestClass>>;
 }
@@ -281,7 +306,7 @@ export const Route = {
   options: verb('options'),
   head: verb('head'),
 
-  /** Respond to GET, POST, PUT, PATCH and DELETE. */
+  /** Respond to every supported HTTP method. */
   any: verb(...ALL_METHODS),
 
   /** Route.match(['get', 'post'], '/webhook', handler) */
@@ -301,19 +326,27 @@ export const Route = {
   /** Route.group({ prefix: '/auth', middleware: ['auth'], as: 'auth.' }, () => { ... }) */
   group: (options: GroupOptions, callback: () => void): void => RouteRegistry.group(options, callback),
 
+  /** Declare routes in a named set: Route.set('web', () => { ... }). */
+  set: (name: string, callback: () => void): void => RouteRegistry.useSet(name, callback),
+
+  /** Associate a route set with its application mount path for URL generation. */
+  mount: (name: string, prefix: string): void => RouteRegistry.mount(name, prefix),
+
   controller: <T extends object>(controller: T) => new GroupBuilder().controller(controller),
 
   /** Fluent groups: Route.prefix('/admin').middleware('auth').as('admin.').group(() => { ... }) */
   prefix: (prefix: string) => new GroupBuilder().prefix(prefix),
   middleware: (...middleware: MiddlewareLike[]) => new GroupBuilder().middleware(...middleware),
+  withoutMiddleware: (...middleware: MiddlewareLike[]) => new GroupBuilder().withoutMiddleware(...middleware),
   as: (name: string) => new GroupBuilder().as(name),
+  name: (name: string) => new GroupBuilder().name(name),
 
   pattern: (param: string, pattern: RegExp) => {
     RouteRegistry.setPattern(param, pattern);
     return Route;
   },
 
-  has: (name: string): boolean => !!RouteRegistry.find(name),
+  has: (name: string): boolean => RouteRegistry.findAll(name).length > 0,
 
   /**
    * Route.resource('users', usersController)
@@ -328,7 +361,7 @@ export const Route = {
       const prefix = result === '' ? '' : result;
       const path = `${prefix}/${segment}`;
       if (index === segments.length - 1) return path;
-      return `${path}/{${segment.replace(/s$/, '')}}`;
+      return `${path}/{${options.parameters?.[segment] ?? singularize(segment)}}`;
     }, '');
     const slug = segments.join('.');
 
@@ -364,11 +397,13 @@ export const Route = {
   /**
    * Route.url('users.show', { id: 5 })            -> '/users/5'
    * Route.url('users.index', { page: 2 })         -> '/users?page=2'   (params not in the path become the query string)
-   * Group prefixes are included, the mount path (like /api) is not.
+   * Group and configured set mount prefixes are included.
    */
   url(name: string, params: Record<string, string | number> = {}): string {
-    const route = RouteRegistry.find(name);
-    if (!route) throw new Error(`Route [${name}] is not defined.`);
+    const matches = RouteRegistry.findAll(name);
+    if (!matches.length) throw new Error(`Route [${name}] is not defined.`);
+    if (matches.length > 1) throw new Error(`Route name [${name}] is ambiguous across route sets.`);
+    const route = matches[0]!;
 
     const used = new Set<string>();
     const path = route.uri.replace(/\{([A-Za-z_][\w]*)(\?)?\}/g, (_match, key: string, optional: string | undefined) => {
@@ -381,27 +416,48 @@ export const Route = {
       return encodeURIComponent(String(value));
     });
 
-    const normalized = path.replace(/\/+/g, '/').replace(/\/$/, '');
+    const normalized = path.replace(/\/+/g, '/').replace(/\/$/, '') || '/';
+    const mounted = normalize(RouteRegistry.mountFor(RouteRegistry.setFor(route)) ?? '', normalized);
     const rest = Object.entries(params).filter(([key]) => !used.has(key));
-    if (!rest.length) return normalized;
-    return `${normalized}?${new URLSearchParams(rest.map(([k, v]) => [k, String(v)])).toString()}`;
+    if (!rest.length) return mounted;
+    return `${mounted}?${new URLSearchParams(rest.map(([k, v]) => [k, String(v)])).toString()}`;
   },
 
-  fallback: (handler: HandlerFunction = (_req, res) => res.status(404).send('Not Found')) => {
+  /** Generate an absolute HMAC-signed URL for a named route. */
+  signedUrl(
+    name: string,
+    params: Record<string, string | number> = {},
+    options: SignedUrlOptions = {},
+  ): string {
+    return UrlSigner.sign(Route.url(name, params), options);
+  },
+
+  fallback: (
+    handler: HandlerFunction = (req, _res, next) =>
+      next(HttpError.notFound(`Route ${req.method()} ${req.raw.originalUrl} not found.`)),
+  ) => {
     const definition = RouteRegistry.add(['get', 'post', 'put', 'patch', 'delete', 'options', 'head'], '/*', handler);
     definition.fallback = true;
     return new PendingRoute(definition);
   },
 
   /** Every declared route (used by route:list). */
-  all: (): readonly RouteDefinition[] => RouteRegistry.all(),
+  all: (name?: string): readonly RouteDefinition[] => RouteRegistry.all(name),
 
-  /** Build the Express router. Call it once, after all routes are declared: app.use('/api', Route.router()) */
-  router(): Router {
-    RouteRegistry.assertValid();
+  /** Build one named Express router. Call it after declaring that set's routes. */
+  router(name = 'default'): Router {
+    RouteRegistry.assertValid(name);
     const router = Router();
 
-    const entries = [...RouteRegistry.all()].sort((a, b) => Number(Boolean(a.fallback)) - Number(Boolean(b.fallback)));
+    const specificity = (definition: RouteDefinition): number =>
+      definition.uri.split('/').filter(Boolean).reduce((score, segment) => score + (segment.startsWith('{') ? 0 : 1), 0);
+    const entries = [...RouteRegistry.all(name)].sort(
+      (a, b) =>
+        Number(Boolean(a.fallback)) - Number(Boolean(b.fallback)) ||
+        Number(b.methods.includes('head') && !b.methods.includes('get')) -
+          Number(a.methods.includes('head') && !a.methods.includes('get')) ||
+        specificity(b) - specificity(a),
+    );
     for (const definition of entries) {
       const guard = constraintGuard(definition);
       const middleware = Middleware.without(definition.middleware, definition.excluded);
@@ -412,6 +468,7 @@ export const Route = {
       ];
 
       for (const method of definition.methods) {
+        if (method === 'head' && definition.methods.includes('get')) continue;
         router[method](toExpressPath(definition.uri), ...handlers);
       }
     }

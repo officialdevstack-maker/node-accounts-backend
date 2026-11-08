@@ -30,6 +30,8 @@ export interface GroupOptions {
   middleware?: MiddlewareLike | MiddlewareLike[];
   /** Middleware inherited from a parent group that should NOT run here */
   withoutMiddleware?: MiddlewareLike | MiddlewareLike[];
+  /** Parameter constraints inherited by every route in the group */
+  where?: Record<string, RegExp>;
   /** Name prefix, e.g. 'auth.' makes .name('login') become 'auth.login' */
   as?: string;
   /** Lets routes in the group use plain method names: Route.get('/x', 'show') */

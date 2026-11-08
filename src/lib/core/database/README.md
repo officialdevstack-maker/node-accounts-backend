@@ -74,8 +74,7 @@ Notes:
 - `rollback` refuses, before changing anything, if a recorded migration's file has been deleted.
 
 ## Models
-Use small modules over the query builder for domain models. For example, `src/models/User.ts` exposes explicit
-lookup and create methods without exposing password fields to ordinary reads.
+See the [model pack](../model/README.md) for active-record-style models, attribute casting, hidden fields, lifecycle hooks, soft deletes, and the `make:model` command.
 
 ## Seeders
 ```bash

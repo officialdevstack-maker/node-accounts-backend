@@ -49,7 +49,7 @@ export class Guard {
   }
 
   async attempt({ email, password }: Credentials, remember = false): Promise<boolean> {
-    const user = await User.findByEmailWithPassword(email);
+    const user = await User.findByEmail(email);
     if (!user || !(await bcrypt.compare(password, user.password))) return false;
 
     await this.login(user, remember);
@@ -68,7 +68,7 @@ export class Guard {
       maxAge: remember ? REMEMBER_MS : undefined,
     });
 
-    this._user = await User.findById(user.id);
+    this._user = await User.find(user.id);
     this._resolved = true;
     return this._user;
   }
@@ -88,7 +88,7 @@ export class Guard {
     const record = await AccessToken.findValid(sha256(plain));
     if (!record) return null;
 
-    this._user = await User.findById(record.userId);
+    this._user = await User.find(record.userId);
     if (this._user) void AccessToken.touch(record.id).catch(() => {});
     return this._user;
   }
