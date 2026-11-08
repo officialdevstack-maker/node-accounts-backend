@@ -25,4 +25,10 @@ const user = await User.where('email', 'ada@example.com').first();
 
 Declare model attributes with `declare` so emitted class fields do not shadow the model's attribute proxy. Queries use database column names; model attributes and serialized object keys use camelCase by default. `hidden` attributes are omitted from `toObject()` and JSON serialization, while remaining available to application logic.
 
+Use `static columns` for explicit attribute-to-column mappings when a name cannot round-trip through camelCase conversion:
+
+```ts
+static columns = { address2: 'address_2' };
+```
+
 Run `artisan make:model Wallet` to create a model under `src/models`. Use `--migration` to also create its table migration.

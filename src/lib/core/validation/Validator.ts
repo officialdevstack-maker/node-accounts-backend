@@ -80,17 +80,17 @@ export class Validator {
 
   /** const v = Validator.make(req.body, rules); if (await v.fails()) ... */
   static make(
-    data: Data,
+    data: object,
     rules: Rules,
     messages: Messages = {},
     attributes: Attributes = {}
   ): Validator {
-    return new Validator(data ?? {}, rules, messages, attributes);
+    return new Validator(data as Data, rules, messages, attributes);
   }
 
   /** Validates and returns clean data, or throws HttpError 422 (like $request->validate()). */
   static validate<T = Data>(
-    data: Data,
+    data: object,
     rules: Rules,
     messages: Messages = {},
     attributes: Attributes = {}

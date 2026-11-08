@@ -1,11 +1,15 @@
 import HttpError from '../../error.js';
+import { inspect } from 'node:util';
+import { config } from '../config/index.js';
 import { pluralize, toSnake } from '../database/support.js';
 import { DB, type Row } from '../query/index.js';
 import { castGet, castSet, type Cast } from './casts.js';
 import { ModelQuery } from './ModelQuery.js';
-import { same, toCamel } from './support.js';
+import { same, snapshot, toCamel } from './support.js';
 
 type Attributes = Record<string, unknown>;
+const reverseColumns = new WeakMap<typeof Model, Map<string, string>>();
+const warnedUncastModels = new WeakSet<typeof Model>();
 
 export interface ModelConstructor<T extends Model> {
   new (): T;
@@ -28,6 +32,7 @@ export abstract class Model {
   static fillable: string[] = [];
   static hidden: string[] = [];
   static casts: Record<string, Cast> = {};
+  static columns: Record<string, string> = {};
 
   static reserved(attribute: string): boolean {
     let prototype: object | null = this.prototype;
@@ -43,11 +48,25 @@ export abstract class Model {
   }
 
   static columnFor(attribute: string): string {
-    return this.camelCase ? toSnake(attribute) : attribute;
+    return this.columns[attribute] ?? (this.camelCase ? toSnake(attribute) : attribute);
   }
 
   static attributeFor(column: string): string {
-    return this.camelCase ? toCamel(column) : column;
+    let reverse = reverseColumns.get(this);
+    if (!reverse) {
+      reverse = new Map(Object.entries(this.columns).map(([attribute, name]) => [name, attribute]));
+      reverseColumns.set(this, reverse);
+    }
+
+    const overridden = reverse.get(column);
+    if (overridden !== undefined) return overridden;
+
+    const attribute = this.camelCase ? toCamel(column) : column;
+    // address_2, api_url and userID are known camel/snake mapping failure cases.
+    if (this.camelCase && this.columnFor(attribute) !== column && this.columns[attribute] === undefined) {
+      throw new Error(`Column "${column}" cannot be mapped reversibly. Add it to static columns or set camelCase = false.`);
+    }
+    return attribute;
   }
 
   static query<T extends Model>(this: ModelConstructor<T>): ModelQuery<T> {
@@ -80,24 +99,56 @@ export abstract class Model {
     return model;
   }
 
-  $attributes: Attributes = {};
-  $original: Attributes = {};
-  $exists = false;
+  $attributes!: Attributes;
+  $original!: Attributes;
+  $changes!: Attributes;
+  $exists!: boolean;
 
   constructor() {
+    Object.defineProperties(this, {
+      $attributes: { value: {}, writable: true, configurable: true, enumerable: false },
+      $original: { value: {}, writable: true, configurable: true, enumerable: false },
+      $changes: { value: {}, writable: true, configurable: true, enumerable: false },
+      $exists: { value: false, writable: true, configurable: true, enumerable: false },
+    });
+
     return new Proxy(this, {
-      get: (target, prop, receiver) =>
-        typeof prop === 'symbol' || prop in target ? Reflect.get(target, prop, receiver) : target.$attributes[prop],
+      get: (target, prop, receiver) => {
+        if (prop === Symbol.for('nodejs.util.inspect.custom')) {
+          return () => `${target.constructor.name} ${inspect(target.toObject())}`;
+        }
+        return typeof prop === 'symbol' || prop in target ? Reflect.get(target, prop, receiver) : target.$attributes[prop];
+      },
       set: (target, prop, value) => {
         if (typeof prop === 'symbol' || prop in target) return Reflect.set(target, prop, value);
-        target.$attributes[prop] = value;
+        target.$attributes[prop] = castGet(target.$model().casts[prop], value);
         return true;
       },
+      has: (target, prop) =>
+        typeof prop === 'string' && Object.prototype.hasOwnProperty.call(target.$attributes, prop)
+          ? true
+          : Reflect.has(target, prop),
+      ownKeys: (target) => [
+        ...Reflect.ownKeys(target).filter((key) => {
+          const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
+          return descriptor !== undefined && !descriptor.configurable;
+        }),
+        ...Object.keys(target.$attributes),
+      ],
+      getOwnPropertyDescriptor: (target, prop) => {
+        if (typeof prop === 'string' && Object.prototype.hasOwnProperty.call(target.$attributes, prop)) {
+          return { configurable: true, enumerable: true, writable: true, value: target.$attributes[prop] };
+        }
+        return Reflect.getOwnPropertyDescriptor(target, prop);
+      },
+      deleteProperty: (target, prop) => {
+        if (typeof prop === 'string' && Object.prototype.hasOwnProperty.call(target.$attributes, prop)) {
+          delete target.$attributes[prop];
+          return true;
+        }
+        return Reflect.deleteProperty(target, prop);
+      },
     });
-  }
-
-  private model(): typeof Model {
-    return this.constructor as typeof Model;
   }
 
   $hydrate(row: Row): this {
@@ -106,9 +157,11 @@ export abstract class Model {
     for (const [column, value] of Object.entries(row)) {
       const attribute = model.attributeFor(column);
       this.assertNotReserved(attribute);
+      this.warnForUncastValue(model, attribute, value);
       this.$attributes[attribute] = castGet(model.casts[attribute], value);
     }
-    this.$original = { ...this.$attributes };
+    this.$original = snapshot(this.$attributes);
+    this.$changes = {};
     this.$exists = true;
     return this;
   }
@@ -120,14 +173,16 @@ export abstract class Model {
     for (const [key, value] of Object.entries(data)) {
       if (all || fillable.includes(key)) {
         this.assertNotReserved(key);
-        this.$attributes[key] = value;
+        this.$attributes[key] = castGet(model.casts[key], value);
       }
     }
     return this;
   }
 
   forceFill(data: Attributes): this {
-    Object.assign(this.$attributes, data);
+    for (const [key, value] of Object.entries(data)) {
+      this.$attributes[key] = castGet(this.$model().casts[key], value);
+    }
     return this;
   }
 
@@ -149,6 +204,14 @@ export abstract class Model {
     return key === undefined ? Object.keys(dirty).length > 0 : key in dirty;
   }
 
+  getChanges(): Attributes {
+    return snapshot(this.$changes);
+  }
+
+  wasChanged(key?: string): boolean {
+    return key === undefined ? Object.keys(this.$changes).length > 0 : key in this.$changes;
+  }
+
   trashed(): boolean {
     const model = this.$model();
     return model.softDeletes && (this.$attributes[model.attributeFor(model.deletedAt)] ?? null) !== null;
@@ -161,6 +224,7 @@ export abstract class Model {
     const createdAttr = model.attributeFor(model.createdAt);
     const updatedAttr = model.attributeFor(model.updatedAt);
 
+    this.$changes = {};
     await this.$fire('saving');
 
     if (!this.$exists) {
@@ -181,7 +245,8 @@ export abstract class Model {
       }
 
       this.$exists = true;
-      this.$original = { ...this.$attributes };
+      this.$changes = snapshot(this.$attributes);
+      this.$original = snapshot(this.$attributes);
       await this.$fire('created');
     } else {
       await this.$fire('updating');
@@ -190,7 +255,8 @@ export abstract class Model {
       if (Object.keys(dirty).length) {
         if (model.timestamps) dirty[updatedAttr] = this.$attributes[updatedAttr] = new Date();
         await DB.table(table).where(model.primaryKey, this.getKey()).update(this.$toRow(dirty));
-        this.$original = { ...this.$attributes };
+        this.$changes = snapshot(dirty);
+        this.$original = snapshot(this.$attributes);
       }
       await this.$fire('updated');
     }
@@ -215,7 +281,8 @@ export abstract class Model {
       await query.update({ [model.deletedAt]: now });
       const attribute = model.attributeFor(model.deletedAt);
       this.$attributes[attribute] = now;
-      this.$original[attribute] = now;
+      this.$original = snapshot(this.$attributes);
+      this.$changes = { [attribute]: snapshot(now) };
     } else {
       await query.delete();
       this.$exists = false;
@@ -238,7 +305,8 @@ export abstract class Model {
     await DB.table(model.tableName()).where(model.primaryKey, this.getKey()).update({ [model.deletedAt]: null });
     const attribute = model.attributeFor(model.deletedAt);
     this.$attributes[attribute] = null;
-    this.$original[attribute] = null;
+    this.$original = snapshot(this.$attributes);
+    this.$changes = { [attribute]: null };
     return this;
   }
 
@@ -274,6 +342,16 @@ export abstract class Model {
     if (model.reserved(attribute)) {
       throw new Error(`Column "${attribute}" on ${model.name} collides with a model method. Rename the attribute via static columns.`);
     }
+  }
+
+  private warnForUncastValue(model: typeof Model, attribute: string, value: unknown): void {
+    if (model.casts[attribute] !== undefined || config('app.env') === 'production' || warnedUncastModels.has(model)) return;
+    const suspiciousBoolean = typeof value === 'number' && (value === 0 || value === 1);
+    const suspiciousDate = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}(?:[ T].*)?$/.test(value);
+    if (!suspiciousBoolean && !suspiciousDate) return;
+
+    warnedUncastModels.add(model);
+    console.warn(`Model ${model.name} hydrated uncast column "${attribute}" with a ${suspiciousBoolean ? '0/1 value' : 'date-like string'}. Declare a cast for this attribute.`);
   }
 
   private async $fire(event: 'saving' | 'saved' | 'creating' | 'created' | 'updating' | 'updated' | 'deleting' | 'deleted'): Promise<void> {
