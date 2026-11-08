@@ -29,6 +29,15 @@ export abstract class Model {
   static hidden: string[] = [];
   static casts: Record<string, Cast> = {};
 
+  static reserved(attribute: string): boolean {
+    let prototype: object | null = this.prototype;
+    while (prototype && prototype !== Object.prototype) {
+      if (Object.prototype.hasOwnProperty.call(prototype, attribute)) return true;
+      prototype = Object.getPrototypeOf(prototype) as object | null;
+    }
+    return false;
+  }
+
   static tableName(): string {
     return this.table ?? pluralize(toSnake(this.name));
   }
@@ -92,10 +101,11 @@ export abstract class Model {
   }
 
   $hydrate(row: Row): this {
-    const model = this.model();
+    const model = this.$model();
     this.$attributes = {};
     for (const [column, value] of Object.entries(row)) {
       const attribute = model.attributeFor(column);
+      this.assertNotReserved(attribute);
       this.$attributes[attribute] = castGet(model.casts[attribute], value);
     }
     this.$original = { ...this.$attributes };
@@ -104,10 +114,14 @@ export abstract class Model {
   }
 
   fill(data: Attributes): this {
-    const { fillable } = this.model();
+    const model = this.$model();
+    const { fillable } = model;
     const all = fillable.includes('*');
     for (const [key, value] of Object.entries(data)) {
-      if (all || fillable.includes(key)) this.$attributes[key] = value;
+      if (all || fillable.includes(key)) {
+        this.assertNotReserved(key);
+        this.$attributes[key] = value;
+      }
     }
     return this;
   }
@@ -118,7 +132,7 @@ export abstract class Model {
   }
 
   getKey(): string | number {
-    const model = this.model();
+    const model = this.$model();
     return this.$attributes[model.attributeFor(model.primaryKey)] as string | number;
   }
 
@@ -136,21 +150,21 @@ export abstract class Model {
   }
 
   trashed(): boolean {
-    const model = this.model();
+    const model = this.$model();
     return model.softDeletes && (this.$attributes[model.attributeFor(model.deletedAt)] ?? null) !== null;
   }
 
   async save(): Promise<this> {
-    const model = this.model();
+    const model = this.$model();
     const table = model.tableName();
     const keyAttr = model.attributeFor(model.primaryKey);
     const createdAttr = model.attributeFor(model.createdAt);
     const updatedAttr = model.attributeFor(model.updatedAt);
 
-    await this.fire('saving');
+    await this.$fire('saving');
 
     if (!this.$exists) {
-      await this.fire('creating');
+      await this.$fire('creating');
 
       if (model.timestamps) {
         const now = new Date();
@@ -158,7 +172,7 @@ export abstract class Model {
         this.$attributes[updatedAttr] ??= now;
       }
 
-      const row = this.toRow(this.$attributes);
+      const row = this.$toRow(this.$attributes);
       if (this.$attributes[keyAttr] === undefined || this.$attributes[keyAttr] === null) {
         const id = await DB.table(table).insertGetId(row, model.primaryKey);
         this.$attributes[keyAttr] = typeof id === 'string' && /^\d+$/.test(id) ? Number(id) : id;
@@ -168,20 +182,20 @@ export abstract class Model {
 
       this.$exists = true;
       this.$original = { ...this.$attributes };
-      await this.fire('created');
+      await this.$fire('created');
     } else {
-      await this.fire('updating');
+      await this.$fire('updating');
 
       const dirty = this.getDirty();
       if (Object.keys(dirty).length) {
         if (model.timestamps) dirty[updatedAttr] = this.$attributes[updatedAttr] = new Date();
-        await DB.table(table).where(model.primaryKey, this.getKey()).update(this.toRow(dirty));
+        await DB.table(table).where(model.primaryKey, this.getKey()).update(this.$toRow(dirty));
         this.$original = { ...this.$attributes };
       }
-      await this.fire('updated');
+      await this.$fire('updated');
     }
 
-    await this.fire('saved');
+    await this.$fire('saved');
     return this;
   }
 
@@ -191,9 +205,9 @@ export abstract class Model {
 
   async delete(): Promise<boolean> {
     if (!this.$exists) return false;
-    const model = this.model();
+    const model = this.$model();
 
-    await this.fire('deleting');
+    await this.$fire('deleting');
     const query = DB.table(model.tableName()).where(model.primaryKey, this.getKey());
 
     if (model.softDeletes) {
@@ -206,20 +220,20 @@ export abstract class Model {
       await query.delete();
       this.$exists = false;
     }
-    await this.fire('deleted');
+    await this.$fire('deleted');
     return true;
   }
 
   async forceDelete(): Promise<boolean> {
     if (!this.$exists) return false;
-    const model = this.model();
+    const model = this.$model();
     await DB.table(model.tableName()).where(model.primaryKey, this.getKey()).delete();
     this.$exists = false;
     return true;
   }
 
   async restore(): Promise<this> {
-    const model = this.model();
+    const model = this.$model();
     if (!model.softDeletes) return this;
     await DB.table(model.tableName()).where(model.primaryKey, this.getKey()).update({ [model.deletedAt]: null });
     const attribute = model.attributeFor(model.deletedAt);
@@ -229,14 +243,14 @@ export abstract class Model {
   }
 
   async refresh(): Promise<this> {
-    const model = this.model();
+    const model = this.$model();
     const row = await DB.table(model.tableName()).where(model.primaryKey, this.getKey()).first();
     if (!row) throw HttpError.notFound(`${model.name} not found.`);
     return this.$hydrate(row);
   }
 
   toObject(): Attributes {
-    const hidden = new Set(this.model().hidden);
+    const hidden = new Set(this.$model().hidden);
     return Object.fromEntries(Object.entries(this.$attributes).filter(([key]) => !hidden.has(key)));
   }
 
@@ -244,14 +258,25 @@ export abstract class Model {
     return this.toObject();
   }
 
-  private toRow(attributes: Attributes): Row {
-    const model = this.model();
+  private $toRow(attributes: Attributes): Row {
+    const model = this.$model();
     const row: Row = {};
     for (const [key, value] of Object.entries(attributes)) row[model.columnFor(key)] = castSet(model.casts[key], value);
     return row;
   }
 
-  private async fire(event: string): Promise<void> {
+  private $model(): typeof Model {
+    return this.constructor as typeof Model;
+  }
+
+  private assertNotReserved(attribute: string): void {
+    const model = this.$model();
+    if (model.reserved(attribute)) {
+      throw new Error(`Column "${attribute}" on ${model.name} collides with a model method. Rename the attribute via static columns.`);
+    }
+  }
+
+  private async $fire(event: 'saving' | 'saved' | 'creating' | 'created' | 'updating' | 'updated' | 'deleting' | 'deleted'): Promise<void> {
     const hook: unknown = Reflect.get(this, event);
     if (typeof hook === 'function') await hook.call(this);
   }
