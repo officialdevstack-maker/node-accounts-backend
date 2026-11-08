@@ -9,7 +9,7 @@ export default class extends Migration {
       t.string('email').unique();
       t.string('password');
       t.string('phone').nullable();
-      t.boolean('is_verified').nullable().default(false);
+      t.boolean('isVerified').nullable().default(false);
       t.enum('account_type', ['user', 'business', 'developer']).nullable().default('user');
       t.dateTime('created_at');
       t.dateTime('updated_at');

@@ -9,8 +9,8 @@ export default class extends Migration {
       t.string('token_hash', 64).unique();
       t.dateTime('expires_at').nullable();
       t.dateTime('last_used_at').nullable();
-      t.dateTime('created_at');
-      t.dateTime('updated_at');
+      t.dateTime('createdAt');
+      t.dateTime('updatedAt');
 
       t.index('user_id');
     });

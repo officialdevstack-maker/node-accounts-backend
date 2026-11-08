@@ -23,8 +23,8 @@ export const AccessToken = {
       user_id: input.userId,
       token_hash: input.tokenHash,
       expires_at: input.expiresAt,
-      created_at: now,
-      updated_at: now,
+      createdAt: now,
+      updatedAt: now,
     });
   },
 
