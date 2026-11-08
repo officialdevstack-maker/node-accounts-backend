@@ -1,12 +1,15 @@
 import HttpError from '../../error.js';
+import type { Connection } from '../query/Connection.js';
 import { DB, type Column, type Paginated, type QueryBuilder, type Row } from '../query/index.js';
 import type { Model, ModelConstructor } from './Model.js';
+import { castSet } from './casts.js';
 
 type Trashed = 'without' | 'with' | 'only';
 
 export class ModelQuery<T extends Model> {
-  private readonly builder: QueryBuilder;
+  private builder: QueryBuilder;
   private trashed: Trashed = 'without';
+  private includeHidden = false;
 
   constructor(private readonly ctor: ModelConstructor<T>) {
     this.builder = DB.table(ctor.tableName());
@@ -28,6 +31,20 @@ export class ModelQuery<T extends Model> {
 
   withTrashed(): this { this.trashed = 'with'; return this; }
   onlyTrashed(): this { this.trashed = 'only'; return this; }
+  withHidden(): this { this.includeHidden = true; return this; }
+  lockForUpdate(): this { this.builder.lockForUpdate(); return this; }
+  using(connection: Connection): this {
+    this.builder = connection.table(this.ctor.tableName());
+    return this;
+  }
+
+  increment(attribute: string, amount = 1, extra: Record<string, unknown> = {}): Promise<number> {
+    return this.scoped().increment(this.ctor.columnFor(attribute), amount, this.toRow(extra));
+  }
+
+  decrement(attribute: string, amount = 1, extra: Record<string, unknown> = {}): Promise<number> {
+    return this.scoped().decrement(this.ctor.columnFor(attribute), amount, this.toRow(extra));
+  }
 
   async get(): Promise<T[]> {
     return (await this.scoped().get()).map((row) => this.hydrate(row));
@@ -76,7 +93,15 @@ export class ModelQuery<T extends Model> {
 
   private hydrate(row: Row): T {
     const model = new this.ctor();
-    model.$hydrate(row);
+    model.$hydrate(row, this.includeHidden);
     return model;
+  }
+
+  private toRow(attributes: Record<string, unknown>): Row {
+    const row: Row = {};
+    for (const [attribute, value] of Object.entries(attributes)) {
+      row[this.ctor.columnFor(attribute)] = castSet(this.ctor.casts[attribute], value);
+    }
+    return row;
   }
 }

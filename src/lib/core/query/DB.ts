@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { Database } from '../database/Database.js';
 import type { QueryBuilder } from './Builder.js';
 import { Connection } from './Connection.js';
@@ -6,13 +7,14 @@ import type { QueryEvent, Row } from './types.js';
 
 export class DB {
   private static custom?: Connection;
+  private static readonly transactionStore = new AsyncLocalStorage<Connection>();
 
   static useConnection(connection: Connection): void {
     this.custom = connection;
   }
 
   static connection(): Connection {
-    return this.custom ?? Database.connection();
+    return this.transactionStore.getStore() ?? this.custom ?? Database.connection();
   }
 
   static table(name: string | Raw): QueryBuilder {
@@ -51,8 +53,8 @@ export class DB {
     return this.connection().statement(sql, bindings);
   }
 
-  static transaction<T>(callback: (trx: Connection) => Promise<T>): Promise<T> {
-    return this.connection().transaction(callback);
+  static transaction<T>(callback: (trx: Connection) => Promise<T>, connection?: Connection): Promise<T> {
+    return (connection ?? this.connection()).transaction((trx) => this.transactionStore.run(trx, () => callback(trx)));
   }
 
   static listen(listener: (event: QueryEvent) => void): () => void {

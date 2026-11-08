@@ -49,8 +49,8 @@ export class Guard {
   }
 
   async attempt({ email, password }: Credentials, remember = false): Promise<boolean> {
-    const user = await User.findByEmail(email);
-    if (!user || !(await bcrypt.compare(password, user.password))) return false;
+    const user = await User.findByEmailWithPassword(email);
+    if (!user || !(await bcrypt.compare(password, String(user.getHidden("password"))))) return false;
 
     await this.login(user, remember);
     return true;

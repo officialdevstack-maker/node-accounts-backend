@@ -27,4 +27,8 @@ export class User extends Model {
   static findByEmail(email: string) {
     return User.where('email', email).first();
   }
+
+  static findByEmailWithPassword(email: string) {
+    return User.query().withHidden().where('email', email).first();
+  }
 }

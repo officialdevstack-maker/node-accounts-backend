@@ -3,6 +3,7 @@ import { inspect } from 'node:util';
 import { config } from '../config/index.js';
 import { pluralize, toSnake } from '../database/support.js';
 import { DB, type Row } from '../query/index.js';
+import type { Connection } from '../query/Connection.js';
 import { castGet, castSet, type Cast } from './casts.js';
 import { ModelQuery } from './ModelQuery.js';
 import { same, snapshot, toCamel } from './support.js';
@@ -17,6 +18,8 @@ export interface ModelConstructor<T extends Model> {
   primaryKey: string;
   softDeletes: boolean;
   deletedAt: string;
+  casts: Record<string, Cast>;
+  columnFor(attribute: string): string;
   tableName(): string;
 }
 
@@ -33,6 +36,8 @@ export abstract class Model {
   static hidden: string[] = [];
   static casts: Record<string, Cast> = {};
   static columns: Record<string, string> = {};
+  static versionColumn: string | undefined = undefined;
+  static transactional = false;
 
   static reserved(attribute: string): boolean {
     let prototype: object | null = this.prototype;
@@ -103,6 +108,8 @@ export abstract class Model {
   $original!: Attributes;
   $changes!: Attributes;
   $exists!: boolean;
+  $secrets!: Attributes;
+  $loadedHidden!: boolean;
 
   constructor() {
     Object.defineProperties(this, {
@@ -110,15 +117,13 @@ export abstract class Model {
       $original: { value: {}, writable: true, configurable: true, enumerable: false },
       $changes: { value: {}, writable: true, configurable: true, enumerable: false },
       $exists: { value: false, writable: true, configurable: true, enumerable: false },
+      $secrets: { value: {}, writable: true, configurable: true, enumerable: false },
+      $loadedHidden: { value: false, writable: true, configurable: true, enumerable: false },
     });
 
     return new Proxy(this, {
-      get: (target, prop, receiver) => {
-        if (prop === Symbol.for('nodejs.util.inspect.custom')) {
-          return () => `${target.constructor.name} ${inspect(target.toObject())}`;
-        }
-        return typeof prop === 'symbol' || prop in target ? Reflect.get(target, prop, receiver) : target.$attributes[prop];
-      },
+      get: (target, prop, receiver) =>
+        typeof prop === 'symbol' || prop in target ? Reflect.get(target, prop, receiver) : target.$attributes[prop],
       set: (target, prop, value) => {
         if (typeof prop === 'symbol' || prop in target) return Reflect.set(target, prop, value);
         target.$attributes[prop] = castGet(target.$model().casts[prop], value);
@@ -151,14 +156,21 @@ export abstract class Model {
     });
   }
 
-  $hydrate(row: Row): this {
+  $hydrate(row: Row, withHidden = false): this {
     const model = this.$model();
     this.$attributes = {};
+    this.$secrets = {};
+    this.$loadedHidden = withHidden;
+    const hidden = new Set(model.hidden);
     for (const [column, value] of Object.entries(row)) {
       const attribute = model.attributeFor(column);
       this.assertNotReserved(attribute);
       this.warnForUncastValue(model, attribute, value);
-      this.$attributes[attribute] = castGet(model.casts[attribute], value);
+      if (hidden.has(attribute)) {
+        if (withHidden) this.$secrets[attribute] = castGet(model.casts[attribute], value);
+      } else {
+        this.$attributes[attribute] = castGet(model.casts[attribute], value);
+      }
     }
     this.$original = snapshot(this.$attributes);
     this.$changes = {};
@@ -212,23 +224,45 @@ export abstract class Model {
     return key === undefined ? Object.keys(this.$changes).length > 0 : key in this.$changes;
   }
 
+  getHidden(key: string): unknown {
+    if (!this.$loadedHidden) {
+      throw new Error(`${this.$model().name} was loaded without withHidden().`);
+    }
+    if (!this.$model().hidden.includes(key)) {
+      throw new Error(`Column "${key}" is not hidden on ${this.$model().name}.`);
+    }
+    if (!Object.prototype.hasOwnProperty.call(this.$secrets, key)) {
+      throw new Error(`Hidden column "${key}" was not loaded on ${this.$model().name}.`);
+    }
+    return this.$secrets[key];
+  }
+
   trashed(): boolean {
     const model = this.$model();
     return model.softDeletes && (this.$attributes[model.attributeFor(model.deletedAt)] ?? null) !== null;
   }
 
-  async save(): Promise<this> {
+  async save(options: { connection?: Connection } = {}): Promise<this> {
     const model = this.$model();
+    if (model.transactional) {
+      return DB.transaction((connection) => this.$save({ connection }), options.connection);
+    }
+    return this.$save(options);
+  }
+
+  private async $save(options: { connection?: Connection }): Promise<this> {
+    const model = this.$model();
+    const connection = options.connection ?? DB.connection();
     const table = model.tableName();
     const keyAttr = model.attributeFor(model.primaryKey);
     const createdAttr = model.attributeFor(model.createdAt);
     const updatedAttr = model.attributeFor(model.updatedAt);
 
     this.$changes = {};
-    await this.$fire('saving');
+    if (await this.$fire('saving') === false) return this;
 
     if (!this.$exists) {
-      await this.$fire('creating');
+      if (await this.$fire('creating') === false) return this;
 
       if (model.timestamps) {
         const now = new Date();
@@ -238,10 +272,10 @@ export abstract class Model {
 
       const row = this.$toRow(this.$attributes);
       if (this.$attributes[keyAttr] === undefined || this.$attributes[keyAttr] === null) {
-        const id = await DB.table(table).insertGetId(row, model.primaryKey);
+        const id = await connection.table(table).insertGetId(row, model.primaryKey);
         this.$attributes[keyAttr] = typeof id === 'string' && /^\d+$/.test(id) ? Number(id) : id;
       } else {
-        await DB.table(table).insert(row);
+        await connection.table(table).insert(row);
       }
 
       this.$exists = true;
@@ -249,12 +283,34 @@ export abstract class Model {
       this.$original = snapshot(this.$attributes);
       await this.$fire('created');
     } else {
-      await this.$fire('updating');
+      if (await this.$fire('updating') === false) return this;
 
       const dirty = this.getDirty();
       if (Object.keys(dirty).length) {
         if (model.timestamps) dirty[updatedAttr] = this.$attributes[updatedAttr] = new Date();
-        await DB.table(table).where(model.primaryKey, this.getKey()).update(this.$toRow(dirty));
+        if (model.versionColumn) {
+          const versionAttribute = model.attributeFor(model.versionColumn);
+          const expectedVersion = this.$attributes[versionAttribute];
+          if (expectedVersion === undefined || expectedVersion === null) {
+            throw new Error(`Model ${model.name} is missing loaded version column "${model.versionColumn}".`);
+          }
+          const update = this.$toRow(dirty);
+          delete update[model.versionColumn];
+          const affected = await connection.table(table)
+            .where(model.primaryKey, this.getKey())
+            .where(model.versionColumn, expectedVersion)
+            .increment(model.versionColumn, 1, update);
+          if (affected === 0) {
+            throw new HttpError(409, 'The record was changed by someone else. Reload and try again.');
+          }
+          const nextVersion = await connection.table(table)
+            .where(model.primaryKey, this.getKey())
+            .value(model.versionColumn);
+          this.$attributes[versionAttribute] = castGet(model.casts[versionAttribute], nextVersion);
+          dirty[versionAttribute] = this.$attributes[versionAttribute];
+        } else {
+          await connection.table(table).where(model.primaryKey, this.getKey()).update(this.$toRow(dirty));
+        }
         this.$changes = snapshot(dirty);
         this.$original = snapshot(this.$attributes);
       }
@@ -269,12 +325,22 @@ export abstract class Model {
     return this.fill(data).save();
   }
 
-  async delete(): Promise<boolean> {
+  async delete(options: { connection?: Connection } = {}): Promise<boolean> {
     if (!this.$exists) return false;
     const model = this.$model();
+    if (model.transactional) {
+      return DB.transaction((connection) => this.$delete({ connection }), options.connection);
+    }
+    return this.$delete(options);
+  }
 
-    await this.$fire('deleting');
-    const query = DB.table(model.tableName()).where(model.primaryKey, this.getKey());
+  private async $delete(options: { connection?: Connection }): Promise<boolean> {
+    if (!this.$exists) return false;
+    const model = this.$model();
+    const connection = options.connection ?? DB.connection();
+
+    if (await this.$fire('deleting') === false) return false;
+    const query = connection.table(model.tableName()).where(model.primaryKey, this.getKey());
 
     if (model.softDeletes) {
       const now = new Date();
@@ -289,6 +355,42 @@ export abstract class Model {
     }
     await this.$fire('deleted');
     return true;
+  }
+
+  increment(attribute: string, amount = 1, extra: Attributes = {}): Promise<this> {
+    return this.$step(attribute, amount, '+', extra);
+  }
+
+  decrement(attribute: string, amount = 1, extra: Attributes = {}): Promise<this> {
+    return this.$step(attribute, amount, '-', extra);
+  }
+
+  private async $step(attribute: string, amount: number, direction: '+' | '-', extra: Attributes): Promise<this> {
+    if (!this.$exists) throw new Error(`Cannot ${direction === '+' ? 'increment' : 'decrement'} an unsaved ${this.$model().name}.`);
+
+    const model = this.$model();
+    const connection = DB.connection();
+    const column = model.columnFor(attribute);
+    const extraRow = this.$toRow(extra);
+    const query = connection.table(model.tableName()).where(model.primaryKey, this.getKey());
+    if (direction === '+') await query.increment(column, amount, extraRow);
+    else await query.decrement(column, amount, extraRow);
+
+    const selected = [column, ...Object.keys(extraRow)];
+    const row = await connection.table(model.tableName())
+      .where(model.primaryKey, this.getKey())
+      .first([...new Set(selected)]);
+    if (!row) throw HttpError.notFound(`${model.name} not found.`);
+
+    this.$changes = {};
+    for (const [dbColumn, value] of Object.entries(row)) {
+      const key = model.attributeFor(dbColumn);
+      this.$attributes[key] = castGet(model.casts[key], value);
+      this.$original[key] = snapshot(this.$attributes[key]);
+      this.$changes[key] = snapshot(this.$attributes[key]);
+    }
+    await this.$fire('updated');
+    return this;
   }
 
   async forceDelete(): Promise<boolean> {
@@ -326,6 +428,10 @@ export abstract class Model {
     return this.toObject();
   }
 
+  [Symbol.for('nodejs.util.inspect.custom')](): string {
+    return `${this.constructor.name} ${inspect(this.toObject())}`;
+  }
+
   private $toRow(attributes: Attributes): Row {
     const model = this.$model();
     const row: Row = {};
@@ -354,8 +460,8 @@ export abstract class Model {
     console.warn(`Model ${model.name} hydrated uncast column "${attribute}" with a ${suspiciousBoolean ? '0/1 value' : 'date-like string'}. Declare a cast for this attribute.`);
   }
 
-  private async $fire(event: 'saving' | 'saved' | 'creating' | 'created' | 'updating' | 'updated' | 'deleting' | 'deleted'): Promise<void> {
+  private async $fire(event: 'saving' | 'saved' | 'creating' | 'created' | 'updating' | 'updated' | 'deleting' | 'deleted'): Promise<unknown> {
     const hook: unknown = Reflect.get(this, event);
-    if (typeof hook === 'function') await hook.call(this);
+    if (typeof hook === 'function') return hook.call(this);
   }
 }

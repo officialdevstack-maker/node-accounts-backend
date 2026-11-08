@@ -23,7 +23,7 @@ export class User extends Model {
 const user = await User.where('email', 'ada@example.com').first();
 ```
 
-Declare model attributes with `declare` so emitted class fields do not shadow the model's attribute proxy. Queries use database column names; model attributes and serialized object keys use camelCase by default. `hidden` attributes are omitted from `toObject()` and JSON serialization, while remaining available to application logic.
+Declare model attributes with `declare` so emitted class fields do not shadow the model's attribute proxy. Queries use database column names; model attributes and serialized object keys use camelCase by default. Hidden columns are not retained by default. Use `withHidden()` and `getHidden()` when an operation explicitly needs one; hidden attributes assigned in code remain writable and dirty-tracked.
 
 Use `static columns` for explicit attribute-to-column mappings when a name cannot round-trip through camelCase conversion:
 
@@ -32,3 +32,5 @@ static columns = { address2: 'address_2' };
 ```
 
 Run `artisan make:model Wallet` to create a model under `src/models`. Use `--migration` to also create its table migration.
+
+Models may set `static versionColumn = 'version'` to enable optimistic locking on updates, or `static transactional = true` to run saves and deletes with their hooks in a transaction. `increment()` and `decrement()` perform atomic column updates; use `Model.query().lockForUpdate()` when a row must be locked inside a transaction. A `saving`, `creating`, `updating`, or `deleting` hook may return `false` to cancel the operation without writing.
