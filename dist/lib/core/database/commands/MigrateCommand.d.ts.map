@@ -1,1 +1,0 @@
-{"version":3,"file":"MigrateCommand.d.ts","sourceRoot":"","sources":["../../../../../src/lib/core/database/commands/MigrateCommand.ts"],"names":[],"mappings":"AAGA,OAAO,EAAE,eAAe,EAAE,MAAM,sBAAsB,CAAC;AAGvD,qBAAa,cAAe,SAAQ,eAAe;IACjD,QAAQ,CAAC,SAAS,4IACyH;IAC3I,QAAQ,CAAC,WAAW,yCAAyC;IAEvD,MAAM,IAAI,OAAO,CAAC,MAAM,CAAC;CAgBhC"}

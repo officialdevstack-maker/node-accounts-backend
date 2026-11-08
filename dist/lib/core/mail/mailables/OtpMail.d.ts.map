@@ -1,1 +1,0 @@
-{"version":3,"file":"OtpMail.d.ts","sourceRoot":"","sources":["../../../../../src/lib/core/mail/mailables/OtpMail.ts"],"names":[],"mappings":"AACA,OAAO,EAAE,QAAQ,EAAE,MAAM,gBAAgB,CAAC;AAG1C,qBAAa,OAAQ,SAAQ,QAAQ;IAEjC,OAAO,CAAC,IAAI;IACZ,OAAO,CAAC,gBAAgB;gBADhB,IAAI,EAAE,MAAM,EACZ,gBAAgB,SAAK;IAK/B,KAAK,IAAI,IAAI;CAcd"}

@@ -1,1 +1,0 @@
-{"version":3,"file":"DatabaseChannel.d.ts","sourceRoot":"","sources":["../../../../../src/lib/core/notifications/channels/DatabaseChannel.ts"],"names":[],"mappings":"AAGA,OAAO,KAAK,EAAE,YAAY,EAAE,MAAM,oBAAoB,CAAC;AACvD,OAAO,KAAK,EAAE,OAAO,EAAE,UAAU,EAAE,MAAM,aAAa,CAAC;AAEvD,qBAAa,eAAgB,YAAW,OAAO;IACvC,IAAI,CAAC,UAAU,EAAE,UAAU,EAAE,YAAY,EAAE,YAAY,GAAG,OAAO,CAAC,IAAI,CAAC;CAc9E"}

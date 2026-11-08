@@ -1,6 +1,6 @@
 // math/commands/MathSplitCommand.ts
-import { CliError, Command } from '../../cli/index.js';
-import { Decimal } from '../Decimal.js';
+import { CliError, Command } from '../cli/index.js';
+import { Decimal } from './Decimal.js';
 
 export class MathSplitCommand extends Command {
   readonly signature =

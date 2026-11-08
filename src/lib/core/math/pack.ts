@@ -1,9 +1,9 @@
 // math/pack.ts
 // Found automatically by artisan (every <folder>/pack.ts next to cli/ is loaded). No registration needed.
 import { definePack } from '../cli/index.js';
-import { MathCalcCommand } from './commands/MathCalcCommand.js';
-import { MathSplitCommand } from './commands/MathSplitCommand.js';
-import { MathStatsCommand } from './commands/MathStatsCommand.js';
+import { MathCalcCommand } from './MathCalcCommand.js';
+import { MathSplitCommand } from './MathSplitCommand.js';
+import { MathStatsCommand } from './MathStatsCommand.js';
 
 export default definePack({
   name: 'math',

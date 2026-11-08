@@ -1,1 +1,0 @@
-{"version":3,"file":"stubs.js","sourceRoot":"","sources":["../../../../src/lib/core/routing/stubs.ts"],"names":[],"mappings":"AAAA,yFAAyF;AAEzF,MAAM,UAAU,cAAc,CAAC,GAAW,EAAE,QAAgB,EAAE,QAAiB;IAC7E,MAAM,OAAO,GAAG,QAAQ;QACtB,CAAC,CAAC;;;;;;;;;;;;;;;;;;;;CAoBL;QACG,CAAC,CAAC;;;;CAIL,CAAC;IAEA,OAAO,sBAAsB,GAAG;;;QAG1B,GAAG;EACT,OAAO;;;eAGM,QAAQ,UAAU,GAAG;CACnC,CAAC;AACF,CAAC"}

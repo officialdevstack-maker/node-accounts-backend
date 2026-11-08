@@ -6,7 +6,7 @@ export const databaseConfig = {
 
   host: env.string('DB_HOST', '127.0.0.1'),
   port: env.number('DB_PORT', 3306),
-  name: env.string('DB_DATABASE', 'spurs'),
+  name: env.string('DB_NAME', 'node_accounts'),
   username: env.string('DB_USERNAME', 'root'),
   password: env.string('DB_PASSWORD', ''),
   /** Table that records which migrations have run (Laravel's `migrations` table) */

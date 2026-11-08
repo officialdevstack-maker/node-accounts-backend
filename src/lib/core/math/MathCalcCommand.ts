@@ -1,6 +1,6 @@
 // math/commands/MathCalcCommand.ts
-import { CliError, Command } from '../../cli/index.js';
-import { evaluate } from '../Expression.js';
+import { CliError, Command } from '../cli/index.js';
+import { evaluate } from './Expression.js';
 
 export class MathCalcCommand extends Command {
   readonly signature =

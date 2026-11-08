@@ -1,1 +1,0 @@
-{"version":3,"file":"MigrateResetCommand.d.ts","sourceRoot":"","sources":["../../../../../src/lib/core/database/commands/MigrateResetCommand.ts"],"names":[],"mappings":"AAGA,OAAO,EAAE,eAAe,EAAE,MAAM,sBAAsB,CAAC;AAGvD,qBAAa,mBAAoB,SAAQ,eAAe;IACtD,QAAQ,CAAC,SAAS,gEAAgE;IAClF,QAAQ,CAAC,WAAW,6CAA6C;IAE3D,MAAM,IAAI,OAAO,CAAC,MAAM,CAAC;CAgBhC"}

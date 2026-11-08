@@ -1,1 +1,0 @@
-{"version":3,"file":"index.d.ts","sourceRoot":"","sources":["../../../../src/lib/core/controller/index.ts"],"names":[],"mappings":"AACA,OAAO,EAAE,UAAU,EAAE,KAAK,eAAe,EAAE,KAAK,WAAW,EAAE,MAAM,iBAAiB,CAAC;AACrF,OAAO,EAAE,KAAK,EAAE,KAAK,WAAW,EAAE,MAAM,sBAAsB,CAAC;AAC/D,OAAO,EAAE,WAAW,EAAE,WAAW,EAAE,KAAK,KAAK,EAAE,KAAK,QAAQ,EAAE,KAAK,UAAU,EAAE,MAAM,qBAAqB,CAAC"}

@@ -16,6 +16,7 @@ import { notificationsConfig } from './notifications.js';
 import { queueConfig } from './queue.js';
 import { ratelimitConfig } from './ratelimit.js';
 import { servicesConfig } from './services.js';
+import { storageConfig } from './storage.js';
 
 export { env } from './env.js';
 export type { MailerName } from './mail.js';
@@ -30,6 +31,7 @@ const repository = {
   queue: queueConfig,
   ratelimit: ratelimitConfig,
   services: servicesConfig,
+  storage: storageConfig,
 };
 
 export type ConfigRepository = typeof repository;
@@ -104,4 +106,4 @@ export function config<P extends ConfigPath>(
   return Config.get(path, fallback);
 }
 
-export { appConfig, authConfig, databaseConfig, mailConfig, notificationsConfig, queueConfig, ratelimitConfig, servicesConfig };
+export { appConfig, authConfig, databaseConfig, mailConfig, notificationsConfig, queueConfig, ratelimitConfig, servicesConfig, storageConfig };

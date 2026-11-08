@@ -1,6 +1,6 @@
 // math/commands/MathStatsCommand.ts
-import { CliError, Command } from '../../cli/index.js';
-import { Num } from '../Num.js';
+import { CliError, Command } from '../cli/index.js';
+import { Num } from './Num.js';
 
 export class MathStatsCommand extends Command {
   readonly signature = 'math:stats {numbers : Comma separated numbers, e.g. 4,8,15,16,23,42} {--sample : Use the sample (n - 1) standard deviation}';

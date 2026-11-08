@@ -1,1 +1,0 @@
-{"version":3,"file":"MailInfoCommand.d.ts","sourceRoot":"","sources":["../../../../../src/lib/core/mail/commands/MailInfoCommand.ts"],"names":[],"mappings":"AACA,OAAO,EAAE,OAAO,EAAE,MAAM,oBAAoB,CAAC;AAE7C,qBAAa,eAAgB,SAAQ,OAAO;IAC1C,QAAQ,CAAC,SAAS,eAAe;IACjC,QAAQ,CAAC,WAAW,0CAA0C;IAE9D,MAAM,IAAI,IAAI;CAGf"}

@@ -1,1 +1,0 @@
-{"version":3,"file":"RouteListCommand.d.ts","sourceRoot":"","sources":["../../../../../src/lib/core/routing/commands/RouteListCommand.ts"],"names":[],"mappings":"AAGA,OAAO,EAAY,OAAO,EAAE,MAAM,oBAAoB,CAAC;AAKvD,qBAAa,gBAAiB,SAAQ,OAAO;IAC3C,QAAQ,CAAC,SAAS,2YACwX;IAC1Y,QAAQ,CAAC,WAAW,qDAAqD;IAEnE,MAAM,IAAI,OAAO,CAAC,MAAM,CAAC;CA+ChC"}

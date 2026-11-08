@@ -1,1 +1,0 @@
-{"version":3,"file":"MakeMailCommand.d.ts","sourceRoot":"","sources":["../../../../../src/lib/core/cli/commands/MakeMailCommand.ts"],"names":[],"mappings":"AACA,OAAO,EAAE,OAAO,EAAE,MAAM,eAAe,CAAC;AAIxC,qBAAa,eAAgB,SAAQ,OAAO;IAC1C,QAAQ,CAAC,SAAS,6GAA6G;IAC/H,QAAQ,CAAC,WAAW,mDAAmD;IAEjE,MAAM,IAAI,OAAO,CAAC,MAAM,CAAC;CAiBhC"}

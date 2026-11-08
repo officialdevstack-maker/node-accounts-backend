@@ -1,1 +1,0 @@
-{"version":3,"file":"pack.js","sourceRoot":"","sources":["../../../../src/lib/core/routing/pack.ts"],"names":[],"mappings":"AAAA,0GAA0G;AAC1G,OAAO,EAAE,UAAU,EAAE,MAAM,iBAAiB,CAAC;AAC7C,OAAO,EAAE,gBAAgB,EAAE,MAAM,gCAAgC,CAAC;AAElE,eAAe,UAAU,CAAC;IACxB,IAAI,EAAE,SAAS;IACf,WAAW,EAAE,6BAA6B;IAC1C,QAAQ,EAAE,CAAC,gBAAgB,CAAC;CAC7B,CAAC,CAAC"}

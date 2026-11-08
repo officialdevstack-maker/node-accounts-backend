@@ -15,7 +15,7 @@ class VerifyRegisteredUserController extends Controller {
             return this.abort(404, 'User not found.')
         }
 
-        const length = config("auth.otp.length");
+        const length = config("auth.otp.length", 6);
         const code = String(randomInt(0, 10 ** length)).padStart(length, "0");
 
         await Notify.send(user, new OtpNotification(code, config("auth.otp.ttlMinutes")));
