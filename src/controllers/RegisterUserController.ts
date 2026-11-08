@@ -1,31 +1,13 @@
-import type { Request } from "express"
 import Auth from "../lib/auth/index.js"
-import { Controller } from "../lib/core/controller/index.js"
+import { Controller, type HttpRequest } from "../lib/core/controller/index.js"
 import { Mail, WelcomeMail } from "../lib/core/mail/index.js";
-import Validator from "../lib/core/validation/Validator.js";
 import { User } from "../models/User.js"
+import type { RegisterUserRequest } from "../requests/RegisterUserRequest.js"
 
 class RegisterUserController extends Controller {
 
-    async create(req: Request) {
-        const v = Validator.make(req.body, {
-            // validators/auth.ts
-            fullname: [ "required",  "string",
-            `regex:${String.raw`/^\p{L}[\p{L}'.-]*(?:\s+\p{L}[\p{L}'.-]*)+$/u`}`,
-            ],
-            email: ['required', "unique:users", "email"],
-            phone: ["required","string"],
-            password: "required|string|min:8|confirmed"
-
-        }, {
-            "fullname.regex": "Must enter first and last names"
-        });
-
-        if (await v.fails()) {
-            return this.abort(422, "validation error", v.errors().toObject())
-        }
-
-        const data = v.validated()
+    async create(req: RegisterUserRequest) {
+        const data = req.validated<{ fullname: string; email: string; phone: string; password: string }>()
 
         const user = await User.create({
             fullname: data.fullname,

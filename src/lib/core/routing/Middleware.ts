@@ -34,8 +34,41 @@ export class Middleware {
     return factory(...params);
   }
 
+  /**
+   * Does `target` cover `item`? A bare alias covers every parameter variant,
+   * while a parameterized alias only covers the exact same string.
+   */
+  static matches(item: MiddlewareLike, target: MiddlewareLike): boolean {
+    if (item === target) return true;
+
+    if (typeof item === 'string' && typeof target === 'string') {
+      return target.includes(':') ? item === target : item.split(':')[0] === target;
+    }
+
+    if (typeof item === 'string' && typeof target === 'function') {
+      return !item.includes(':') && this.aliasHandler(item) === target;
+    }
+
+    if (typeof item === 'function' && typeof target === 'string') {
+      return !target.includes(':') && this.aliasHandler(target) === item;
+    }
+
+    return false;
+  }
+
+  /** The middleware that actually runs: `list` minus everything covered by `excluded`. */
+  static without(list: readonly MiddlewareLike[], excluded: readonly MiddlewareLike[]): MiddlewareLike[] {
+    if (!excluded.length) return [...list];
+    return list.filter((item) => !excluded.some((target) => this.matches(item, target)));
+  }
+
   /** Label used by route:list */
   static describe(item: MiddlewareLike): string {
     return typeof item === 'string' ? item : item.name || 'anonymous';
+  }
+
+  private static aliasHandler(name: string): RequestHandler | undefined {
+    const factory = this.aliases.get(name);
+    return factory ? factory() : undefined;
   }
 }

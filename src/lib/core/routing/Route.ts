@@ -1,5 +1,6 @@
 // The facade:  Route.get('/profile', [controller, 'show']).middleware(authMiddleware).name('profile')
 import { Router, type NextFunction, type RequestHandler } from 'express';
+import { FormRequest, HttpRequest } from '../request/index.js';
 import { sendResult } from '../response/index.js';
 import { Middleware } from './Middleware.js';
 import { normalize, RouteRegistry } from './RouteRegistry.js';
@@ -8,6 +9,7 @@ import type {
   HandlerFunction,
   HttpMethod,
   MiddlewareLike,
+  RequestClass,
   RouteAction,
   RouteDefinition,
   RouteHandler,
@@ -16,6 +18,10 @@ import type {
 const ALL_METHODS: HttpMethod[] = ['get', 'post', 'put', 'patch', 'delete'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+function sameMiddleware(a: MiddlewareLike, b: MiddlewareLike): boolean {
+  return a === b || (typeof a === 'string' && typeof b === 'string' && a === b);
+}
 
 /** Returned by every Route.get/post/... so you can chain .name(), .middleware() and .where(). */
 export class PendingRoute {
@@ -38,14 +44,44 @@ export class PendingRoute {
     return this;
   }
 
+  withoutMiddleware(...middleware: MiddlewareLike[]): this {
+    const items = middleware.flat();
+    this.definition.middleware = this.definition.middleware.filter((item) => !items.some((candidate) => sameMiddleware(item, candidate)));
+    this.definition.excluded.push(...items);
+    return this;
+  }
+
+  /** The handler receives this request class. A FormRequest is validated and authorized first: .request(RegisterUserRequest) */
+  request(request: RequestClass): this {
+    this.definition.request = request;
+    return this;
+  }
+
   /** Express 5 has no inline regex (:id(\d+)), so params are checked before middleware runs. A miss falls through to 404. */
-  where(param: string, pattern: RegExp): this {
-    this.definition.constraints[param] = new RegExp(pattern.source, pattern.flags.replace(/[gy]/g, ''));
+  where(param: string, pattern: RegExp): this;
+  where(match: Record<string, RegExp>): this;
+  where(param: string | Record<string, RegExp>, pattern?: RegExp): this {
+    if (typeof param === 'string') {
+      this.definition.constraints[param] = new RegExp(pattern!.source, pattern!.flags.replace(/[gy]/g, ''));
+      return this;
+    }
+
+    Object.entries(param).forEach(([key, value]) => this.where(key, value));
     return this;
   }
 
   whereNumber(...params: string[]): this {
     params.forEach((p) => this.where(p, /^\d+$/));
+    return this;
+  }
+
+  whereAlpha(...params: string[]): this {
+    params.forEach((p) => this.where(p, /^[A-Za-z]+$/));
+    return this;
+  }
+
+  whereAlphaNumeric(...params: string[]): this {
+    params.forEach((p) => this.where(p, /^[A-Za-z0-9]+$/));
     return this;
   }
 
@@ -56,6 +92,53 @@ export class PendingRoute {
 
   whereIn(param: string, values: string[]): this {
     return this.where(param, new RegExp(`^(?:${values.map(escapeRegex).join('|')})$`));
+  }
+}
+
+export class PendingResource {
+  constructor(private readonly routes: PendingRoute[]) {}
+
+  middleware(...middleware: MiddlewareLike[]): this {
+    this.routes.forEach((route) => route.middleware(...middleware));
+    return this;
+  }
+
+  withoutMiddleware(...middleware: MiddlewareLike[]): this {
+    this.routes.forEach((route) => route.withoutMiddleware(...middleware));
+    return this;
+  }
+
+  where(param: string, pattern: RegExp): this;
+  where(match: Record<string, RegExp>): this;
+  where(param: string | Record<string, RegExp>, pattern?: RegExp): this {
+    this.routes.forEach((route) => {
+      if (typeof param === 'string') {
+        route.where(param, pattern!);
+      } else {
+        route.where(param);
+      }
+    });
+    return this;
+  }
+
+  whereNumber(...params: string[]): this {
+    this.routes.forEach((route) => route.whereNumber(...params));
+    return this;
+  }
+
+  whereAlpha(...params: string[]): this {
+    this.routes.forEach((route) => route.whereAlpha(...params));
+    return this;
+  }
+
+  whereAlphaNumeric(...params: string[]): this {
+    this.routes.forEach((route) => route.whereAlphaNumeric(...params));
+    return this;
+  }
+
+  whereUuid(...params: string[]): this {
+    this.routes.forEach((route) => route.whereUuid(...params));
+    return this;
   }
 }
 
@@ -73,6 +156,17 @@ class GroupBuilder {
     return this;
   }
 
+  withoutMiddleware(...middleware: MiddlewareLike[]): this {
+    const current = this.options.withoutMiddleware;
+    this.options.withoutMiddleware = [...(current === undefined ? [] : [current].flat()), ...middleware];
+    return this;
+  }
+
+  controller(controller: object): this {
+    this.options.controller = controller;
+    return this;
+  }
+
   as(name: string): this {
     this.options.as = name;
     return this;
@@ -83,16 +177,25 @@ class GroupBuilder {
   }
 }
 
-export type ResourceAction = 'index' | 'store' | 'show' | 'update' | 'destroy';
+export type ResourceAction = 'index' | 'create' | 'store' | 'show' | 'edit' | 'update' | 'destroy';
 
 export interface ResourceOptions {
   only?: ResourceAction[];
   except?: ResourceAction[];
   /** URL parameter name (default 'id') */
   param?: string;
+  /** Request class per action: { store: StoreUserRequest, update: UpdateUserRequest } */
+  requests?: Partial<Record<ResourceAction, RequestClass>>;
 }
 
-/** Turns a RouteHandler into a plain Express handler that sends whatever the handler returns. */
+function toExpressPath(uri: string): string {
+  return uri.replace(/\{([^}]+)\}/g, (_match, key: string) => {
+    const optional = key.endsWith('?');
+    return `:${optional ? key.slice(0, -1) : key}${optional ? '?' : ''}`;
+  });
+}
+
+/** Turns a RouteHandler into a plain Express handler: builds the HttpRequest, validates FormRequests, sends the result. */
 function resolveHandler(definition: RouteDefinition): RequestHandler {
   const { handler } = definition;
   let call: HandlerFunction;
@@ -119,7 +222,13 @@ function resolveHandler(definition: RouteDefinition): RequestHandler {
     }) as NextFunction;
 
     try {
-      const result = await call(req, res, forward);
+      const RequestType = definition.request ?? HttpRequest;
+      const request = new RequestType(req as never);
+      if (request instanceof FormRequest) {
+        await request.validateResolved();
+      }
+
+      const result = await call(request as never, res, forward);
       if (!forwarded) await sendResult(res, result);
     } catch (error) {
       next(error);
@@ -127,8 +236,20 @@ function resolveHandler(definition: RouteDefinition): RequestHandler {
   };
 }
 
-function constraintGuard(constraints: Record<string, RegExp>): RequestHandler | undefined {
-  const entries = Object.entries(constraints);
+function constraintGuard(definition: RouteDefinition): RequestHandler | undefined {
+  const entries = [...Object.entries(definition.constraints)];
+  const patternParams = [...definition.uri.matchAll(/\{([A-Za-z_][\w]*)(\?)?\}/g)].flatMap((match) => {
+    const param = match[1];
+    return param ? [param] : [];
+  });
+
+  for (const param of patternParams) {
+    const globalPattern = RouteRegistry.patternFor(param);
+    if (!entries.some(([key]) => key === param) && globalPattern) {
+      entries.push([param, globalPattern]);
+    }
+  }
+
   if (!entries.length) return undefined;
 
   return (req, _res, next) => {
@@ -175,31 +296,50 @@ export const Route = {
       }),
     ),
 
+  permanentRedirect: (from: string, to: string) => Route.redirect(from, to, 301),
+
   /** Route.group({ prefix: '/auth', middleware: ['auth'], as: 'auth.' }, () => { ... }) */
   group: (options: GroupOptions, callback: () => void): void => RouteRegistry.group(options, callback),
+
+  controller: <T extends object>(controller: T) => new GroupBuilder().controller(controller),
 
   /** Fluent groups: Route.prefix('/admin').middleware('auth').as('admin.').group(() => { ... }) */
   prefix: (prefix: string) => new GroupBuilder().prefix(prefix),
   middleware: (...middleware: MiddlewareLike[]) => new GroupBuilder().middleware(...middleware),
   as: (name: string) => new GroupBuilder().as(name),
 
+  pattern: (param: string, pattern: RegExp) => {
+    RouteRegistry.setPattern(param, pattern);
+    return Route;
+  },
+
+  has: (name: string): boolean => !!RouteRegistry.find(name),
+
   /**
    * Route.resource('users', usersController)
-   *   index GET /users · store POST /users · show GET /users/:id
-   *   update PUT|PATCH /users/:id · destroy DELETE /users/:id
+   *   index GET /users · store POST /users · show GET /users/{id}
+   *   update PUT|PATCH /users/{id} · destroy DELETE /users/{id}
    * Actions the controller does not implement are skipped.
    */
-  resource(name: string, controller: object, options: ResourceOptions = {}): PendingRoute[] {
+  resource(name: string, controller: object, options: ResourceOptions = {}): PendingResource {
     const param = options.param ?? 'id';
-    const base = normalize(name);
-    const slug = name.split('/').filter(Boolean).join('.');
+    const segments = name.split(/[./]/).filter(Boolean);
+    const base = segments.reduce((result, segment, index) => {
+      const prefix = result === '' ? '' : result;
+      const path = `${prefix}/${segment}`;
+      if (index === segments.length - 1) return path;
+      return `${path}/{${segment.replace(/s$/, '')}}`;
+    }, '');
+    const slug = segments.join('.');
 
     const actions: Array<[ResourceAction, HttpMethod[], string]> = [
-      ['index', ['get'], base],
-      ['store', ['post'], base],
-      ['show', ['get'], `${base}/:${param}`],
-      ['update', ['put', 'patch'], `${base}/:${param}`],
-      ['destroy', ['delete'], `${base}/:${param}`],
+      ['index', ['get'], base || '/'],
+      ['create', ['get'], `${base}/create`],
+      ['store', ['post'], base || '/'],
+      ['show', ['get'], `${base}/{${param}}`],
+      ['edit', ['get'], `${base}/{${param}}/edit`],
+      ['update', ['put', 'patch'], `${base}/{${param}}`],
+      ['destroy', ['delete'], `${base}/{${param}}`],
     ];
 
     const created: PendingRoute[] = [];
@@ -209,9 +349,16 @@ export const Route = {
       if (typeof (controller as Record<string, unknown>)[action] !== 'function') continue;
 
       const pending = new PendingRoute(RouteRegistry.add(methods, uri, [controller, action]));
+      const request = options.requests?.[action];
+      if (request) pending.request(request);
       created.push(pending.name([slug, action].filter(Boolean).join('.')));
     }
-    return created;
+    return new PendingResource(created);
+  },
+
+  apiResource(name: string, controller: object, options: ResourceOptions = {}): PendingResource {
+    const except = [...(options.except ?? []), 'create', 'edit'] as ResourceAction[];
+    return Route.resource(name, controller, { ...options, except });
   },
 
   /**
@@ -224,16 +371,26 @@ export const Route = {
     if (!route) throw new Error(`Route [${name}] is not defined.`);
 
     const used = new Set<string>();
-    const path = route.uri.replace(/:(\w+)/g, (_match, key: string) => {
+    const path = route.uri.replace(/\{([A-Za-z_][\w]*)(\?)?\}/g, (_match, key: string, optional: string | undefined) => {
       const value = params[key];
-      if (value === undefined) throw new Error(`Route [${name}] is missing the "${key}" parameter.`);
+      if (value === undefined) {
+        if (optional) return '';
+        throw new Error(`Route [${name}] is missing the "${key}" parameter.`);
+      }
       used.add(key);
       return encodeURIComponent(String(value));
     });
 
+    const normalized = path.replace(/\/+/g, '/').replace(/\/$/, '');
     const rest = Object.entries(params).filter(([key]) => !used.has(key));
-    if (!rest.length) return path;
-    return `${path}?${new URLSearchParams(rest.map(([k, v]) => [k, String(v)])).toString()}`;
+    if (!rest.length) return normalized;
+    return `${normalized}?${new URLSearchParams(rest.map(([k, v]) => [k, String(v)])).toString()}`;
+  },
+
+  fallback: (handler: HandlerFunction = (_req, res) => res.status(404).send('Not Found')) => {
+    const definition = RouteRegistry.add(['get', 'post', 'put', 'patch', 'delete', 'options', 'head'], '/*', handler);
+    definition.fallback = true;
+    return new PendingRoute(definition);
   },
 
   /** Every declared route (used by route:list). */
@@ -244,16 +401,18 @@ export const Route = {
     RouteRegistry.assertValid();
     const router = Router();
 
-    for (const definition of RouteRegistry.all()) {
-      const guard = constraintGuard(definition.constraints);
+    const entries = [...RouteRegistry.all()].sort((a, b) => Number(Boolean(b.fallback)) - Number(Boolean(a.fallback)));
+    for (const definition of entries) {
+      const guard = constraintGuard(definition);
+      const middleware = Middleware.without(definition.middleware, definition.excluded);
       const handlers: RequestHandler[] = [
         ...(guard ? [guard] : []),
-        ...definition.middleware.map((middleware) => Middleware.resolve(middleware)),
+        ...middleware.map((item) => Middleware.resolve(item)),
         resolveHandler(definition),
       ];
 
       for (const method of definition.methods) {
-        router[method](definition.uri, ...handlers);
+        router[method](toExpressPath(definition.uri), ...handlers);
       }
     }
     return router;

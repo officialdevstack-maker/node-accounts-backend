@@ -8,7 +8,7 @@ import { normalize } from '../RouteRegistry.js';
 
 export class RouteListCommand extends Command {
   readonly signature =
-    'route:list {--file=src/routes/index.ts : Routes file to load (relative to the project root)} {--prefix=/api : Path the router is mounted on} {--method= : Only this HTTP method} {--name= : Only names containing this text} {--path= : Only URIs containing this text} {--middleware= : Only routes using this middleware} {--json : Print JSON instead of a table}';
+    'route:list {--file=src/routes/api.ts : Routes file to load (relative to the project root)} {--prefix=/api : Path the router is mounted on} {--method= : Only this HTTP method} {--name= : Only names containing this text} {--path= : Only URIs containing this text} {--middleware= : Only routes using this middleware} {--json : Print JSON instead of a table}';
   readonly description = 'List every route declared with the Route facade';
 
   async handle(): Promise<number> {
@@ -29,7 +29,9 @@ export class RouteListCommand extends Command {
         uri: normalize(prefix, route.uri),
         name: route.name ?? '',
         action: describeAction(route.handler),
-        middleware: route.middleware.map((m) => Middleware.describe(m)).join(', '),
+        middleware: Middleware.without(route.middleware, route.excluded)
+          .map((m) => Middleware.describe(m))
+          .join(', '),
       }))
       .filter((r) => !method || r.method.split('|').includes(method))
       .filter((r) => !name || r.name.includes(name))

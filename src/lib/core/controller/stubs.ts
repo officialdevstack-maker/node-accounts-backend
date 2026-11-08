@@ -9,40 +9,39 @@ export interface ControllerStubOptions {
 
 export function controllerStub({ cls, instance, importPath, resource }: ControllerStubOptions): string {
   const methods = resource
-    ? `  async index(req: Request) {
+    ? `  async index(req: HttpRequest) {
     // const { page, perPage } = this.pageParams(req);
     // return this.paginated(await DB.table('things').orderByDesc('id').paginate(perPage, page));
     return this.ok([]);
   }
 
-  async store(req: Request) {
+  async store(req: HttpRequest) {
     const data = await this.validate(req, {
       // name: 'required|string|max:255',
     });
     return this.created(data);
   }
 
-  async show(req: Request) {
-    return this.ok({ id: req.params.id });
+  async show(req: HttpRequest) {
+    return this.ok({ id: req.route('id') });
   }
 
-  async update(req: Request) {
+  async update(req: HttpRequest) {
     const data = await this.validate(req, {
       // name: 'sometimes|string|max:255',
     });
-    return this.ok({ id: req.params.id, ...data }, 'updated');
+    return this.ok({ id: req.route('id'), ...data }, 'updated');
   }
 
-  async destroy(req: Request) {
+  async destroy(req: HttpRequest) {
     return this.noContent();
   }`
-    : `  async index(req: Request) {
+    : `  async index(req: HttpRequest) {
     return this.ok([]);
   }`;
 
   return `// src/controllers/${cls}.ts
-import type { Request } from 'express';
-import { Controller } from '${importPath}';
+import { Controller, type HttpRequest } from '${importPath}';
 
 class ${cls} extends Controller {
 ${methods}

@@ -1,16 +1,15 @@
-import type { Request } from "express"
 import bcrypt from "bcryptjs"
 import Auth from "../lib/auth/index.js"
-import { Controller } from "../lib/core/controller/index.js"
+import { Controller, type HttpRequest } from "../lib/core/controller/index.js"
 import Validator from "../lib/core/validation/Validator.js"
 import { User } from "../models/User.js"
 
 class AuthenticationController extends Controller {
-    show(req: Request) {
+    show(req: HttpRequest) {
         return this.ok(req.user, 'Successfully fetched user')
     }
 
-    async create(req: Request) {
+    async create(req: HttpRequest) {
         const v = Validator.make(req.body, {
             email: 'required|email',
             password: 'required|string'

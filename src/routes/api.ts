@@ -1,5 +1,21 @@
-import Route from "../lib/core/routing/Route.js";
+import "../middleware/kernel.js";
+import { Route } from "../lib/core/routing/index.js";
+import { authenticationController } from "../controllers/AuthenticationController.js";
+import { registerUserController } from "../controllers/RegisterUserController.js";
+import { verifyRegisteredUserController } from "../controllers/VerifyRegisteredUserController.js";
+import { RegisterUserRequest } from "../requests/RegisterUserRequest.js";
 
-// Route.post("", )
+Route.group({ prefix: "/auth", as: "auth." }, () => {
+  Route.post("/login", [authenticationController, "create"]).middleware("throttle:auth").name("login");
 
-Route.prefix("api").group(function(){})
+  Route.middleware("auth").group(() => {
+    Route.post("/logout", [authenticationController, "delete"]).name("logout");
+    Route.get("/profile", [authenticationController, "show"]).name("profile");
+  });
+
+  Route.post("/register", [registerUserController, "create"]).request(RegisterUserRequest).middleware("throttle:auth").name("register");
+});
+
+Route.post("/verify-email", [verifyRegisteredUserController, "create"]).middleware("throttle:5,1").name("verify-email");
+
+export const apiV1Route = Route.router();
