@@ -1,5 +1,4 @@
-import Auth from "../lib/auth/index.js"
-import { Controller, type HttpRequest } from "../lib/core/controller/index.js"
+import { Controller } from "../lib/core/controller/index.js"
 import { Mail, WelcomeMail } from "../lib/core/mail/index.js";
 import { User } from "../models/User.js"
 import type { RegisterUserRequest } from "../requests/RegisterUserRequest.js"
@@ -15,12 +14,9 @@ class RegisterUserController extends Controller {
             phone: data.phone,
             password: data.password,
         })
-        const auth = await Auth.login(user)
-
-        const token = Auth.token()
         await Mail.to(user.email).send(new WelcomeMail(user));
 
-        return this.ok({ auth, token, user }, "successfully registered");
+        return this.ok({ auth: null, token: null, user }, "successfully registered");
     }
 
 }

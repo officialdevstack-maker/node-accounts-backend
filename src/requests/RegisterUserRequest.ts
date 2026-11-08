@@ -6,6 +6,8 @@ export class RegisterUserRequest extends FormRequest {
       fullname: this.string('fullname').trim(),
       email: this.string('email').trim().toLowerCase(),
       phone: this.string('phone').trim(),
+      password: this.string('password'),
+      password_confirmation: this.string('password_confirmation'),
     });
   }
 
