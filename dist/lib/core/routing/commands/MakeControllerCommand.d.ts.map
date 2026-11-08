@@ -1,0 +1,1 @@
+{"version":3,"file":"MakeControllerCommand.d.ts","sourceRoot":"","sources":["../../../../../src/lib/core/routing/commands/MakeControllerCommand.ts"],"names":[],"mappings":"AACA,OAAO,EAAE,OAAO,EAAyC,MAAM,oBAAoB,CAAC;AAGpF,qBAAa,qBAAsB,SAAQ,OAAO;IAChD,QAAQ,CAAC,SAAS,qKACkJ;IACpK,QAAQ,CAAC,WAAW,4CAA4C;IAE1D,MAAM,IAAI,OAAO,CAAC,MAAM,CAAC;CAiBhC"}

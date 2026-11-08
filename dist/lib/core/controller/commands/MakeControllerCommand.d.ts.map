@@ -1,0 +1,1 @@
+{"version":3,"file":"MakeControllerCommand.d.ts","sourceRoot":"","sources":["../../../../../src/lib/core/controller/commands/MakeControllerCommand.ts"],"names":[],"mappings":"AACA,OAAO,EAAgC,OAAO,EAAwC,MAAM,oBAAoB,CAAC;AAGjH,qBAAa,qBAAsB,SAAQ,OAAO;IAChD,QAAQ,CAAC,SAAS,mLACgK;IAClL,QAAQ,CAAC,WAAW,4CAA4C;IAE1D,MAAM,IAAI,OAAO,CAAC,MAAM,CAAC;CAgChC"}

@@ -1,0 +1,40 @@
+// database/support.ts
+import { Raw } from '../query/Raw.js';
+/** 'user' -> 'users', 'category' -> 'categories', 'address' -> 'addresses', 'user_profile' -> 'user_profiles' */
+export function pluralize(word) {
+    if (/[^aeiou]y$/i.test(word))
+        return `${word.slice(0, -1)}ies`;
+    if (/(s|x|z|ch|sh)$/i.test(word))
+        return `${word}es`;
+    return `${word}s`;
+}
+/** 'UserProfile' | 'user-profile' | 'user profile' -> 'user_profile' */
+export const toSnake = (input) => input
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase();
+/** 2026_11_07_103045  (sorts correctly as text, so migrations run in creation order) */
+export function migrationTimestamp(date = new Date()) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return [
+        date.getUTCFullYear(),
+        pad(date.getUTCMonth() + 1),
+        pad(date.getUTCDate()),
+        `${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}`,
+    ].join('_');
+}
+export const quoteId = (name) => `\`${name.replaceAll('`', '``')}\``;
+/** For DDL defaults only. Query values always go through bindings. */
+export function quoteValue(value) {
+    if (value === null || value === undefined)
+        return 'NULL';
+    if (value instanceof Raw)
+        return value.value;
+    if (typeof value === 'number')
+        return String(value);
+    if (typeof value === 'boolean')
+        return value ? '1' : '0';
+    return `'${String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+}
+//# sourceMappingURL=support.js.map

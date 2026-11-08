@@ -1,0 +1,1 @@
+{"version":3,"file":"MigrateStatusCommand.d.ts","sourceRoot":"","sources":["../../../../../src/lib/core/database/commands/MigrateStatusCommand.ts"],"names":[],"mappings":"AAGA,OAAO,EAAE,eAAe,EAAE,MAAM,sBAAsB,CAAC;AAEvD,qBAAa,oBAAqB,SAAQ,eAAe;IACvD,QAAQ,CAAC,SAAS,oBAAoB;IACtC,QAAQ,CAAC,WAAW,oCAAoC;IAElD,MAAM,IAAI,OAAO,CAAC,MAAM,CAAC;CAkBhC"}

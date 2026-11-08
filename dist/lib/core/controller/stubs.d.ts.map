@@ -1,0 +1,1 @@
+{"version":3,"file":"stubs.d.ts","sourceRoot":"","sources":["../../../../src/lib/core/controller/stubs.ts"],"names":[],"mappings":"AACA,MAAM,WAAW,qBAAqB;IACpC,GAAG,EAAE,MAAM,CAAC;IACZ,QAAQ,EAAE,MAAM,CAAC;IACjB,oEAAoE;IACpE,UAAU,EAAE,MAAM,CAAC;IACnB,QAAQ,EAAE,OAAO,CAAC;CACnB;AAED,wBAAgB,cAAc,CAAC,EAAE,GAAG,EAAE,QAAQ,EAAE,UAAU,EAAE,QAAQ,EAAE,EAAE,qBAAqB,GAAG,MAAM,CA0CrG"}

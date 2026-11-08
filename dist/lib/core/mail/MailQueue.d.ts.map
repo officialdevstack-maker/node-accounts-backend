@@ -1,0 +1,1 @@
+{"version":3,"file":"MailQueue.d.ts","sourceRoot":"","sources":["../../../../src/lib/core/mail/MailQueue.ts"],"names":[],"mappings":"AAKA,KAAK,GAAG,GAAG,MAAM,OAAO,CAAC,OAAO,CAAC,CAAC;AAElC,qBAAa,SAAS;IACpB,MAAM,CAAC,IAAI,CAAC,GAAG,EAAE,GAAG,EAAE,OAAO,SAAI,GAAG,IAAI;mBAInB,GAAG;CAazB"}

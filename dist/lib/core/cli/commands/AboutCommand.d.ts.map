@@ -1,0 +1,1 @@
+{"version":3,"file":"AboutCommand.d.ts","sourceRoot":"","sources":["../../../../../src/lib/core/cli/commands/AboutCommand.ts"],"names":[],"mappings":"AAEA,OAAO,EAAE,OAAO,EAAE,MAAM,eAAe,CAAC;AAExC,qBAAa,YAAa,SAAQ,OAAO;IACvC,QAAQ,CAAC,SAAS,WAAW;IAC7B,QAAQ,CAAC,WAAW,kDAAkD;IAEhE,MAAM,IAAI,OAAO,CAAC,IAAI,CAAC;CAsB9B"}

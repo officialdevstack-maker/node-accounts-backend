@@ -20,5 +20,10 @@ export const authConfig = {
     maxAttempts: env.number('OTP_MAX_ATTEMPTS', 5),
   },
 
+  tokens: {
+    shortHours: env.number('TOKEN_TTL_HOURS', 2),
+    rememberDays: env.number('TOKEN_REMEMBER_DAYS', 30),
+  },
+
   passwordResetTtlMinutes: env.number('PASSWORD_RESET_TTL_MINUTES', 60),
 };

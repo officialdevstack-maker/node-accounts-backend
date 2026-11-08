@@ -189,10 +189,10 @@ export interface ResourceOptions {
 }
 
 function toExpressPath(uri: string): string {
-  return uri.replace(/\{([^}]+)\}/g, (_match, key: string) => {
-    const optional = key.endsWith('?');
-    return `:${optional ? key.slice(0, -1) : key}${optional ? '?' : ''}`;
-  });
+  return uri
+    .replace(/\/\{([^}?]+)\?\}/g, '{/:$1}')
+    .replace(/\{([^}/?]+)\}/g, ':$1')
+    .replace(/\/\*$/, '/{*splat}');
 }
 
 /** Turns a RouteHandler into a plain Express handler: builds the HttpRequest, validates FormRequests, sends the result. */
@@ -401,7 +401,7 @@ export const Route = {
     RouteRegistry.assertValid();
     const router = Router();
 
-    const entries = [...RouteRegistry.all()].sort((a, b) => Number(Boolean(b.fallback)) - Number(Boolean(a.fallback)));
+    const entries = [...RouteRegistry.all()].sort((a, b) => Number(Boolean(a.fallback)) - Number(Boolean(b.fallback)));
     for (const definition of entries) {
       const guard = constraintGuard(definition);
       const middleware = Middleware.without(definition.middleware, definition.excluded);

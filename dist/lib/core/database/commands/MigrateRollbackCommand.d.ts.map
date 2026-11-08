@@ -1,0 +1,1 @@
+{"version":3,"file":"MigrateRollbackCommand.d.ts","sourceRoot":"","sources":["../../../../../src/lib/core/database/commands/MigrateRollbackCommand.ts"],"names":[],"mappings":"AAIA,OAAO,EAAE,eAAe,EAAE,MAAM,sBAAsB,CAAC;AAGvD,qBAAa,sBAAuB,SAAQ,eAAe;IACzD,QAAQ,CAAC,SAAS,4IACyH;IAC3I,QAAQ,CAAC,WAAW,uCAAuC;IAErD,MAAM,IAAI,OAAO,CAAC,MAAM,CAAC;CAuBhC"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"MigrateFreshCommand.d.ts","sourceRoot":"","sources":["../../../../../src/lib/core/database/commands/MigrateFreshCommand.ts"],"names":[],"mappings":"AAIA,OAAO,EAAE,eAAe,EAAE,MAAM,sBAAsB,CAAC;AAGvD,qBAAa,mBAAoB,SAAQ,eAAe;IACtD,QAAQ,CAAC,SAAS,yGACsF;IACxG,QAAQ,CAAC,WAAW,qDAAqD;IAEnE,MAAM,IAAI,OAAO,CAAC,MAAM,CAAC;CAoBhC"}

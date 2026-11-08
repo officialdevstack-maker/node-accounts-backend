@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { config } from '../lib/core/config/index.js';
 import { DB, type Row } from '../lib/core/query/index.js';
 
 export type AccountType = 'user' | 'business' | 'developer';
@@ -59,7 +60,7 @@ export const User = {
     const id = await DB.table('users').insertGetId({
       fullname: input.fullname,
       email: input.email,
-      password: await bcrypt.hash(input.password, 10),
+      password: await bcrypt.hash(input.password, config('auth.bcryptRounds')),
       phone: input.phone ?? null,
       is_verified: false,
       account_type: input.accountType ?? 'user',

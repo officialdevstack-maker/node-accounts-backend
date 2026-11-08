@@ -8,12 +8,14 @@ import { normalize } from '../RouteRegistry.js';
 
 export class RouteListCommand extends Command {
   readonly signature =
-    'route:list {--file=src/routes/api.ts : Routes file to load (relative to the project root)} {--prefix=/api : Path the router is mounted on} {--method= : Only this HTTP method} {--name= : Only names containing this text} {--path= : Only URIs containing this text} {--middleware= : Only routes using this middleware} {--json : Print JSON instead of a table}';
+    'route:list {--file= : Routes file to load (defaults to src/routes/api.ts in development or dist/routes/api.js in production)} {--prefix=/api : Path the router is mounted on} {--method= : Only this HTTP method} {--name= : Only names containing this text} {--path= : Only URIs containing this text} {--middleware= : Only routes using this middleware} {--json : Print JSON instead of a table}';
   readonly description = 'List every route declared with the Route facade';
 
   async handle(): Promise<number> {
-    const file = join(process.cwd(), this.option('file')!);
-    if (!existsSync(file)) throw new CliError(`Routes file not found: ${this.option('file')}`);
+    const relativeFile =
+      this.option('file') ?? (import.meta.url.endsWith('.js') ? 'dist/routes/api.js' : 'src/routes/api.ts');
+    const file = join(process.cwd(), relativeFile);
+    if (!existsSync(file)) throw new CliError(`Routes file not found: ${relativeFile}`);
 
     await import(pathToFileURL(file).href); // declaring the routes fills the registry
 

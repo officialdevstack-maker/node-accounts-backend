@@ -4,12 +4,13 @@ import { createHash, randomBytes } from "crypto";
 import type { NextFunction, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 
+import { config } from "../core/config/index.js";
 import { User } from "../../models/User.js";
 import { AccessToken } from "../../models/AccessToken.js";
 
 const COOKIE_NAME = "auth_token";
-const SHORT_MS = 2 * 60 * 60 * 1000;           // 2 hours
-const REMEMBER_MS = 30 * 24 * 60 * 60 * 1000;  // 30 days
+const SHORT_MS = config("auth.tokens.shortHours") * 60 * 60 * 1000;
+const REMEMBER_MS = config("auth.tokens.rememberDays") * 24 * 60 * 60 * 1000;
 
 export type Credentials = { email: string; password: string };
 

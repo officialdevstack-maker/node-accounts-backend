@@ -7,9 +7,12 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "start": "node src/server.ts",
     "dev": "nodemon",
+    "build": "tsc",
+    "start": "node dist/server.js",
     "artisan": "tsx src/lib/core/artisan.ts",
+    "artisan:prod": "node dist/lib/core/artisan.js",
+    "typecheck": "tsc --noEmit",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
@@ -21,8 +24,7 @@
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.12.1",
     "mysql2": "^3.24.6",
-    "nodemailer": "^10.3.1",
-    "tsx": "^4.23.15"
+    "nodemailer": "^10.3.1"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.10",
@@ -31,7 +33,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
     "@types/node": "^26.6.6",
-    "ts-node": "^10.9.2",
+    "tsx": "^4.23.15",
     "typescript": "~5.9.3"
   }
 }

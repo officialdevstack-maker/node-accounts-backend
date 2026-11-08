@@ -1,0 +1,1 @@
+{"version":3,"file":"ratelimit.js","sourceRoot":"","sources":["../../../../src/lib/core/config/ratelimit.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,GAAG,EAAE,MAAM,UAAU,CAAC;AAE/B,MAAM,CAAC,MAAM,eAAe,GAAG;IAC7B,6FAA6F;IAC7F,OAAO,EAAE,GAAG,CAAC,IAAI,CAAC,oBAAoB,EAAE,IAAI,CAAC;IAC7C,+EAA+E;IAC/E,MAAM,EAAE,GAAG,CAAC,MAAM,CAAC,mBAAmB,EAAE,IAAI,CAAC;CAC9C,CAAC"}

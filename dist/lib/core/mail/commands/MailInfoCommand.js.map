@@ -1,0 +1,1 @@
+{"version":3,"file":"MailInfoCommand.js","sourceRoot":"","sources":["../../../../../src/lib/core/mail/commands/MailInfoCommand.ts"],"names":[],"mappings":"AAAA,mCAAmC;AACnC,OAAO,EAAE,OAAO,EAAE,MAAM,oBAAoB,CAAC;AAE7C,MAAM,OAAO,eAAgB,SAAQ,OAAO;IACjC,SAAS,GAAG,WAAW,CAAC;IACxB,WAAW,GAAG,sCAAsC,CAAC;IAE9D,MAAM;QACJ,IAAI,CAAC,IAAI,CAAC,8BAA8B,CAAC,CAAC;IAC5C,CAAC;CACF"}
