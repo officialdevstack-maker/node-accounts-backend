@@ -170,6 +170,7 @@ export class ModelCheckCommand extends DatabaseCommand {
         && !Object.keys(ordinary).includes('password')
         && !Object.prototype.hasOwnProperty.call(ordinary.toObject(), 'password')
         && !JSON.stringify(ordinary).includes('password')
+        && !ordinaryOutput.includes('password')
         && !ordinaryOutput.includes('stored-hash'));
 
       let hiddenReadRejected = false;
@@ -232,11 +233,16 @@ export class ModelCheckCommand extends DatabaseCommand {
         .lockForUpdate()
         .findOrFail(atomic.id));
       check('lockForUpdate works for transactional queries', locked.id === atomic.id);
+      const staticallyLocked = await DB.transaction(() => AtomicCheckModel.findOrFail(atomic.id, { lockForUpdate: true }));
+      check('Model.findOrFail can lock inside a transaction', staticallyLocked.id === atomic.id);
 
       const current = await AtomicCheckModel.findOrFail(atomic.id);
       const stale = await AtomicCheckModel.findOrFail(atomic.id);
       current.email = 'version-updated@example.com';
       await current.save();
+      check('save exposes its written changes', current.wasChanged('email')
+        && current.wasChanged('version')
+        && current.getChanges().email === 'version-updated@example.com');
       stale.email = 'version-stale@example.com';
       let conflict = false;
       try {
@@ -265,7 +271,8 @@ export class ModelCheckCommand extends DatabaseCommand {
       await cancelledUpdate.save();
       const cancelledDelete = await CancelDeletingModel.findOrFail(atomic.id);
       const deleteResult = await cancelledDelete.delete();
-      check('updating and deleting hooks cancel writes', cancelledUpdate.email !== 'cancel-update@example.com'
+      check('updating and deleting hooks cancel writes', cancelledUpdate.isDirty('email')
+        && (await DB.table(hiddenTable).where('id', atomic.id).value('email')) === 'version-updated@example.com'
         && deleteResult === false
         && (await DB.table(hiddenTable).where('id', atomic.id).exists()));
     } finally {

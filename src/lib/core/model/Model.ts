@@ -41,7 +41,7 @@ export abstract class Model {
 
   static reserved(attribute: string): boolean {
     let prototype: object | null = this.prototype;
-    while (prototype && prototype !== Object.prototype) {
+    while (prototype) {
       if (Object.prototype.hasOwnProperty.call(prototype, attribute)) return true;
       prototype = Object.getPrototypeOf(prototype) as object | null;
     }
@@ -93,8 +93,14 @@ export abstract class Model {
     return new ModelQuery(this).find(id);
   }
 
-  static findOrFail<T extends Model>(this: ModelConstructor<T>, id: string | number): Promise<T> {
-    return new ModelQuery(this).findOrFail(id);
+  static findOrFail<T extends Model>(
+    this: ModelConstructor<T>,
+    id: string | number,
+    options: { lockForUpdate?: boolean } = {},
+  ): Promise<T> {
+    const query = new ModelQuery(this);
+    if (options.lockForUpdate) query.lockForUpdate();
+    return query.findOrFail(id);
   }
 
   static async create<T extends Model>(this: ModelConstructor<T>, data: Attributes): Promise<T> {
@@ -125,7 +131,11 @@ export abstract class Model {
       get: (target, prop, receiver) =>
         typeof prop === 'symbol' || prop in target ? Reflect.get(target, prop, receiver) : target.$attributes[prop],
       set: (target, prop, value) => {
-        if (typeof prop === 'symbol' || prop in target) return Reflect.set(target, prop, value);
+        if (typeof prop === 'symbol') return Reflect.set(target, prop, value);
+        if (prop in target) {
+          target.$assertNotReserved(prop);
+          return Reflect.set(target, prop, value);
+        }
         target.$attributes[prop] = castGet(target.$model().casts[prop], value);
         return true;
       },
@@ -164,8 +174,8 @@ export abstract class Model {
     const hidden = new Set(model.hidden);
     for (const [column, value] of Object.entries(row)) {
       const attribute = model.attributeFor(column);
-      this.assertNotReserved(attribute);
-      this.warnForUncastValue(model, attribute, value);
+      this.$assertNotReserved(attribute);
+      this.$warnForUncastValue(model, attribute, value);
       if (hidden.has(attribute)) {
         if (withHidden) this.$secrets[attribute] = castGet(model.casts[attribute], value);
       } else {
@@ -183,8 +193,8 @@ export abstract class Model {
     const { fillable } = model;
     const all = fillable.includes('*');
     for (const [key, value] of Object.entries(data)) {
+      this.$assertNotReserved(key);
       if (all || fillable.includes(key)) {
-        this.assertNotReserved(key);
         this.$attributes[key] = castGet(model.casts[key], value);
       }
     }
@@ -193,6 +203,7 @@ export abstract class Model {
 
   forceFill(data: Attributes): this {
     for (const [key, value] of Object.entries(data)) {
+      this.$assertNotReserved(key);
       this.$attributes[key] = castGet(this.$model().casts[key], value);
     }
     return this;
@@ -443,14 +454,14 @@ export abstract class Model {
     return this.constructor as typeof Model;
   }
 
-  private assertNotReserved(attribute: string): void {
+  private $assertNotReserved(attribute: string): void {
     const model = this.$model();
     if (model.reserved(attribute)) {
       throw new Error(`Column "${attribute}" on ${model.name} collides with a model method. Rename the attribute via static columns.`);
     }
   }
 
-  private warnForUncastValue(model: typeof Model, attribute: string, value: unknown): void {
+  private $warnForUncastValue(model: typeof Model, attribute: string, value: unknown): void {
     if (model.casts[attribute] !== undefined || config('app.env') === 'production' || warnedUncastModels.has(model)) return;
     const suspiciousBoolean = typeof value === 'number' && (value === 0 || value === 1);
     const suspiciousDate = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}(?:[ T].*)?$/.test(value);
