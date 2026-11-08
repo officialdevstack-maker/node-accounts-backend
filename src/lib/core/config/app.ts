@@ -6,6 +6,7 @@ export const appConfig = {
   env: env.oneOf('NODE_ENV', ['development', 'test', 'production'] as const, 'development'),
   debug: env.bool('APP_DEBUG', env.string('NODE_ENV') !== 'production'),
   url: env.string('APP_URL', 'http://localhost:3000'),
+  frontendUrl: env.string('FRONTEND_URL', 'http://localhost:5173'),
   key: env.string('APP_KEY', ''),
   port: env.number('PORT', 3000),
   timezone: env.string('APP_TIMEZONE', 'Africa/Lagos'),
