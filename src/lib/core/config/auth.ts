@@ -18,6 +18,7 @@ export const authConfig = {
     length: env.number('OTP_LENGTH', 6),
     ttlMinutes: env.number('OTP_TTL_MINUTES', 10),
     maxAttempts: env.number('OTP_MAX_ATTEMPTS', 5),
+    resendSeconds: env.number('OTP_RESEND_SECONDS', 60),
   },
 
   tokens: {

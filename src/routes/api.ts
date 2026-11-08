@@ -11,9 +11,9 @@ Route.group({ prefix: "/auth", as: "auth." }, () => {
   Route.middleware("auth").group(() => {
     Route.post("/logout", [authenticationController, "delete"]).name("logout");
     Route.get("/profile", [authenticationController, "show"]).name("profile");
-    Route.post("/verify-email", [verifyRegisteredUserController, "create"]).middleware("throttle:5,1").name("verify-email");
-    Route.post("/resend-verification", [verifyRegisteredUserController, "create"]).middleware("throttle:5,1").name("resend-verification");
-    Route.post("/verify-email/confirm", [verifyRegisteredUserController, "confirm"]).middleware("throttle:5,1").name("verify-email.confirm");
+    Route.post("/verify-email", [verifyRegisteredUserController, "create"]).middleware("throttle:5,1").name("verify-email.send");
+    Route.post("/resend-verification", [verifyRegisteredUserController, "create"]).middleware("throttle:5,1").name("verify-email.resend");
+    Route.post("/verify-email/confirm", [verifyRegisteredUserController, "store"]).middleware("throttle:10,1").name("verify-email.confirm");
   });
 
   Route.post("/register", [registerUserController, "create"]).request(RegisterUserRequest).middleware("throttle:auth").name("register");
