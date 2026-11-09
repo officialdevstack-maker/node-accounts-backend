@@ -50,17 +50,23 @@ export default class OidcClientCreateCommand extends DatabaseCommand {
     const suppliedScopes = this.option('scopes');
     const serviceScopes = config('oidc.serviceScopes');
     const scopes = [...new Set(list(suppliedScopes ?? (
-      service ? serviceScopes.join(',') : clientCredentialsEnabled ? 'profile,email' : 'openid,profile,email'
+      service ? serviceScopes.join(',') : clientCredentialsEnabled ? '' : 'openid,profile,email'
     )))];
-    const allowedScopes = service ? serviceScopes : config('oidc.scopes');
-    const unknown = scopes.filter((scope) => !allowedScopes.includes(scope));
-    if (unknown.length || (!clientCredentialsEnabled && !scopes.includes('openid'))) {
-      throw new CliError(`--scopes must include openid for authorization-code clients and use only: ${allowedScopes.join(', ')}.`);
-    }
     if (clientCredentialsEnabled && (scopes.includes('openid') || scopes.includes('offline_access'))) {
       throw new CliError('Client-credentials scopes cannot include openid or offline_access.');
     }
     if (!scopes.length) throw new CliError('--scopes must include at least one scope.');
+    const invalidScopes = scopes.filter((scope) => {
+      if (!/^[\x21\x23-\x5B\x5D-\x7E]+$/.test(scope)) return true;
+      if (service) return !serviceScopes.includes(scope);
+      return !clientCredentialsEnabled && !config('oidc.scopes').includes(scope);
+    });
+    if (invalidScopes.length || (!clientCredentialsEnabled && !scopes.includes('openid'))) {
+      const allowedScopes = service ? serviceScopes : config('oidc.scopes');
+      throw new CliError(
+        `--scopes must ${clientCredentialsEnabled ? 'contain valid OAuth scope tokens' : 'include openid and use only'}${service || !clientCredentialsEnabled ? `: ${allowedScopes.join(', ')}` : ''}.`,
+      );
+    }
 
     const secret = isPublic ? null : randomToken(32);
     const clientId = randomToken(18);

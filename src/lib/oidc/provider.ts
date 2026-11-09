@@ -10,7 +10,7 @@ import type { AuthorizeParams } from './authorize-request.js';
 import { claimsFor, type Claims } from './claims.js';
 import { OidcError } from './errors.js';
 import { verificationKey } from './keys.js';
-import { signAccessToken, signIdToken, signServiceToken, verifyAccessToken } from './tokens.js';
+import { signAccessToken, signIdToken, signServiceToken, verifyAccessToken, verifyServiceToken } from './tokens.js';
 import { pkceChallenge, safeEqual, str, withParams } from './util.js';
 
 export function errorRedirect(redirectUri: string, state: string | undefined, error: string, description?: string): string {
@@ -203,9 +203,6 @@ export function clientCredentialsToken(client: OAuthClient, body: Record<string,
   if (!client.isConfidential()) {
     throw new OidcError('invalid_client', 'Client credentials require a confidential client.', 401);
   }
-  if (!client.isFirstParty()) {
-    throw new OidcError('unauthorized_client', 'Only first-party clients may use client_credentials.');
-  }
   if (!client.clientCredentialsEnabled) {
     throw new OidcError('unauthorized_client', 'The client credentials grant is not enabled for this client.', 401);
   }
@@ -213,6 +210,9 @@ export function clientCredentialsToken(client: OAuthClient, body: Record<string,
   const serviceScopes = config('oidc.serviceScopes');
   const configuredServiceScopes = client.allowedScopes.filter((scope) => serviceScopes.includes(scope));
   const isServiceClient = configuredServiceScopes.length > 0;
+  if (isServiceClient && (!client.isFirstParty() || client.allowedScopes.some((scope) => !serviceScopes.includes(scope)))) {
+    throw new OidcError('unauthorized_client', 'Internal service scopes are limited to first-party service clients.');
+  }
   const allowed = isServiceClient
     ? configuredServiceScopes
     : client.allowedScopes.filter((scope) => scope !== 'openid' && scope !== 'offline_access');
@@ -247,9 +247,13 @@ export async function userinfo(token: string | null | undefined): Promise<Claims
   if (!claims || claims.grantType !== 'authorization_code') return null;
 
   const grant = await OAuthGrant.find(claims.gid);
-  if (!grant || String(grant.userId) !== claims.sub) return null;
+  if (
+    !grant ||
+    String(grant.userId) !== claims.sub ||
+    claims.scopes.some((scope) => !grant.scopes.includes(scope))
+  ) return null;
   const client = await OAuthClient.findByClientId(claims.clientId);
-  if (!client?.isActive) return null;
+  if (!client?.isActive || grant.oauthClientId !== client.id) return null;
 
   const user = await User.find(grant.userId);
   if (!user) return null;
@@ -263,18 +267,51 @@ export async function introspect(
   body: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   const token = str(body.token);
-  const claims = token ? verifyAccessToken(token) : null;
+  if (!token) return { active: false };
+  const serviceClaims = verifyServiceToken(token);
+  if (serviceClaims) {
+    if (serviceClaims.clientId !== client.clientId && !client.isFirstParty()) return { active: false };
+    const tokenClient = await OAuthClient.findByClientId(serviceClaims.clientId);
+    if (
+      !tokenClient?.isActive ||
+      !tokenClient.clientCredentialsEnabled ||
+      !tokenClient.isFirstParty() ||
+      tokenClient.allowedScopes.some((scope) => !config('oidc.serviceScopes').includes(scope)) ||
+      serviceClaims.scopes.some((scope) =>
+        !tokenClient.allowedScopes.includes(scope) || !config('oidc.serviceScopes').includes(scope),
+      )
+    ) return { active: false };
+    return {
+      active: true,
+      sub: serviceClaims.clientId,
+      client_id: serviceClaims.clientId,
+      scope: serviceClaims.scopes.join(' '),
+      token_type: 'Bearer',
+      iss: config('oidc.issuer'),
+      aud: config('oidc.internalAudience'),
+      exp: serviceClaims.exp,
+    };
+  }
+
+  const claims = verifyAccessToken(token);
   if (!claims) return { active: false };
   if (claims.clientId !== client.clientId && !client.isFirstParty()) return { active: false };
 
+  const tokenClient = await OAuthClient.findByClientId(claims.clientId);
+  if (!tokenClient?.isActive || claims.scopes.some((scope) => !tokenClient.allowedScopes.includes(scope))) {
+    return { active: false };
+  }
+
   if (claims.grantType === 'client_credentials') {
-    const tokenClient = await OAuthClient.findByClientId(claims.clientId);
-    if (!tokenClient?.isActive || !tokenClient.clientCredentialsEnabled) return { active: false };
+    if (!tokenClient.clientCredentialsEnabled) return { active: false };
   } else {
     const grant = await OAuthGrant.find(claims.gid);
-    if (!grant || String(grant.userId) !== claims.sub) return { active: false };
-    const tokenClient = await OAuthClient.findByClientId(claims.clientId);
-    if (!tokenClient?.isActive) return { active: false };
+    if (
+      !grant ||
+      String(grant.userId) !== claims.sub ||
+      grant.oauthClientId !== tokenClient.id ||
+      claims.scopes.some((scope) => !grant.scopes.includes(scope))
+    ) return { active: false };
   }
 
   return {

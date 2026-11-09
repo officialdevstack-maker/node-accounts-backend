@@ -18,6 +18,7 @@ export interface AccessClaims {
 export interface ServiceClaims {
   clientId: string;
   scopes: string[];
+  exp: number;
 }
 
 type AccessTokenInput =
@@ -155,11 +156,19 @@ export function verifyServiceToken(token: string): ServiceClaims | null {
     if (typeof payload === 'string' || payload['token_use'] !== 'service') return null;
 
     const clientId = payload['client_id'];
-    if (typeof clientId !== 'string' || !clientId || payload.sub !== clientId) return null;
+    const exp = payload['exp'];
+    if (
+      typeof clientId !== 'string' ||
+      !clientId ||
+      payload.sub !== clientId ||
+      typeof exp !== 'number' ||
+      !Number.isFinite(exp)
+    ) return null;
 
     return {
       clientId,
       scopes: typeof payload['scope'] === 'string' ? payload['scope'].split(/\s+/).filter(Boolean) : [],
+      exp,
     };
   } catch {
     return null;

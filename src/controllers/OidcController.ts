@@ -43,7 +43,7 @@ class OidcController extends Controller {
       const requestLogin = params.prompt.includes('login') ||
         (Boolean(user) &&
           params.maxAge !== undefined &&
-          Math.floor(Date.now() / 1000) - Math.floor((await this.authTime(req)).getTime() / 1000) > params.maxAge);
+          Math.floor(Date.now() / 1000) - Math.floor((await this.authTime(req)).getTime() / 1000) >= params.maxAge);
       if (user && requestLogin) {
         if (params.prompt.includes('none')) {
           throw new RedirectableError('login_required', 'The user must sign in again.', params.redirectUri, params.state);
