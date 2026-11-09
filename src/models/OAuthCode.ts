@@ -61,4 +61,11 @@ async function consume(code: string): Promise<CodeResult> {
   };
 }
 
-export const OAuthCode = { issue, consume };
+async function destroyForUser(userId: number): Promise<void> {
+  await DB.delete(
+    'DELETE c FROM oauth_codes AS c INNER JOIN oauth_grants AS g ON g.id = c.grant_id WHERE g.user_id = ?',
+    [userId],
+  );
+}
+
+export const OAuthCode = { issue, consume, destroyForUser };

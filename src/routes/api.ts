@@ -60,10 +60,10 @@ Route.group({ prefix: "/oidc", as: "oidc." }, () => {
   Route.get("/jwks", [oidcController, "jwks"]).name("jwks");
   Route.get("/authorize", [oidcController, "authorize"]).middleware("throttle:60,1").name("authorize");
   Route.post("/token", [oidcController, "token"]).middleware("throttle:60,1").name("token");
-  Route.post("/introspect", [oidcController, "introspect"]).middleware("throttle:60,1").name("introspect");
-  Route.match(["get", "post"], "/userinfo", [oidcController, "userinfo"]).name("userinfo");
+  Route.post("/introspect", [oidcController, "introspect"]).name("introspect");
+  Route.match(["get", "post"], "/userinfo", [oidcController, "userinfo"]).middleware("throttle:60,1").name("userinfo");
   Route.post("/revoke", [oidcController, "revoke"]).middleware("throttle:60,1").name("revoke");
-  Route.get("/logout", [oidcController, "logout"]).name("logout");
+  Route.get("/logout", [oidcController, "logout"]).middleware("throttle:60,1").name("logout");
 
   Route.middleware("auth").group(() => {
     Route.get("/consent", [oidcController, "consentShow"]).name("consent.show");
@@ -73,7 +73,7 @@ Route.group({ prefix: "/oidc", as: "oidc." }, () => {
 
 Route.group({ prefix: "/internal", as: "internal." }, () => {
   Route.get("/users/{id}", [internalUserController, "show"])
-    .middleware("service:users:read")
+    .middleware("internal", "service:users:read")
     .whereNumber("id")
     .name("users.show");
 });

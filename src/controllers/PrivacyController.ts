@@ -4,12 +4,14 @@ import { Controller, Reply, type HttpRequest } from '../lib/core/controller/inde
 import { DB } from '../lib/core/query/index.js';
 import { AccessToken } from '../models/AccessToken.js';
 import { Activity } from '../models/Activity.js';
+import { OAuthCode } from '../models/OAuthCode.js';
+import { OAuthRefreshToken } from '../models/OAuthRefreshToken.js';
 import { User } from '../models/User.js';
 import { UserPreference } from '../models/UserPreference.js';
 import type { DeleteAccountRequest } from '../requests/DeleteAccountRequest.js';
 import { removeFile } from './AvatarController.js';
 import { AUTH_COOKIE_NAME, authCookieOptions } from '../lib/auth/cookie.js';
-import { notifyBackchannelLogout } from '../lib/oidc/backchannel-logout.js';
+import { notifyBackchannelLogoutAfterResponse } from '../lib/oidc/response-logout.js';
 
 class PrivacyController extends Controller {
   async export(req: HttpRequest) {
@@ -44,8 +46,11 @@ class PrivacyController extends Controller {
 
     const avatar = user.avatar;
 
-    await notifyBackchannelLogout(user.id);
     await DB.transaction(async () => {
+      await Promise.all([
+        OAuthRefreshToken.destroyForUser(user.id),
+        OAuthCode.destroyForUser(user.id),
+      ]);
       await DB.table('password_resets').where('email', user.email).delete();
       await DB.table('notifications').where('notifiable_id', String(user.id)).delete();
       await user.delete();
@@ -53,6 +58,7 @@ class PrivacyController extends Controller {
 
     await removeFile(avatar);
     res.clearCookie(AUTH_COOKIE_NAME, authCookieOptions);
+    notifyBackchannelLogoutAfterResponse(res, user.id);
 
     return this.ok(undefined, 'Your account has been deleted.');
   }

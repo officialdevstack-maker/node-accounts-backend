@@ -2,7 +2,6 @@
 import { AsyncLocalStorage } from "async_hooks";
 import { createHash, randomBytes } from "crypto";
 import type { NextFunction, Request, Response } from "express";
-import bcrypt from "bcryptjs";
 
 import { config } from "../core/config/index.js";
 import { User } from "../../models/User.js";
@@ -11,7 +10,8 @@ import { Activity, type ActivityContext } from "../../models/Activity.js";
 import { describeDevice } from "./device.js";
 import { notifyOnLogin } from "./alerts.js";
 import { AUTH_COOKIE_NAME, authCookieOptions } from "./cookie.js";
-import { notifyBackchannelLogout } from "../oidc/backchannel-logout.js";
+import { notifyBackchannelLogoutAfterResponse } from "../oidc/response-logout.js";
+import { verifyPassword } from "./password.js";
 
 const SHORT_MS = config("auth.tokens.shortHours") * 60 * 60 * 1000;
 const REMEMBER_MS = config("auth.tokens.rememberDays") * 24 * 60 * 60 * 1000;
@@ -63,7 +63,11 @@ export class Guard {
 
   async attempt({ email, password }: Credentials, remember = false): Promise<boolean> {
     const user = await User.findByEmailWithPassword(email);
-    if (!user || !(await bcrypt.compare(password, String(user.getHidden("password"))))) return false;
+    if (!user) {
+      await verifyPassword(password, undefined);
+      return false;
+    }
+    if (!(await verifyPassword(password, String(user.getHidden("password"))))) return false;
 
     await this.login(user, remember);
     return true;
@@ -79,7 +83,7 @@ export class Guard {
       ...authCookieOptions,
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: config("app.env") === "production",
       maxAge: remember ? REMEMBER_MS : undefined,
     });
 
@@ -139,7 +143,7 @@ export class Guard {
     const plain = this.extractToken();
     if (plain) await AccessToken.destroyByHash(sha256(plain));
     if (user) {
-      await notifyBackchannelLogout(user.id);
+      notifyBackchannelLogoutAfterResponse(this.res, user.id);
       await Activity.record(user.id, "logout", { ip: this.req.ip, userAgent: this.req.get("user-agent") });
     }
 
@@ -153,7 +157,7 @@ export class Guard {
   async logoutAll(): Promise<void> {
     const id = await this.id();
     if (id) {
-      await notifyBackchannelLogout(id);
+      notifyBackchannelLogoutAfterResponse(this.res, id);
       await AccessToken.destroyByUser(id);
       await Activity.record(id, "logout_all", { ip: this.req.ip, userAgent: this.req.get("user-agent") });
     }

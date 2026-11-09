@@ -67,4 +67,11 @@ async function destroyByToken(token: string, clientRef: number): Promise<void> {
   if (grant && Number(grant.oauth_client_id) === clientRef) await DB.table(TABLE).where('id', row.id).delete();
 }
 
-export const OAuthRefreshToken = { issue, rotate, destroyForGrant, destroyByToken };
+async function destroyForUser(userId: number): Promise<void> {
+  await DB.delete(
+    'DELETE rt FROM oauth_refresh_tokens AS rt INNER JOIN oauth_grants AS g ON g.id = rt.grant_id WHERE g.user_id = ?',
+    [userId],
+  );
+}
+
+export const OAuthRefreshToken = { issue, rotate, destroyForGrant, destroyByToken, destroyForUser };

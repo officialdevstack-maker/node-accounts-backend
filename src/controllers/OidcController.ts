@@ -1,6 +1,7 @@
 import Auth from '../lib/auth/index.js';
 import { config } from '../lib/core/config/index.js';
 import { Controller, Reply, type HttpRequest } from '../lib/core/controller/index.js';
+import { Limit, RateLimiter } from '../lib/core/ratelimit/index.js';
 import { parseAuthorizeRequest, readRequest, signRequest } from '../lib/oidc/authorize-request.js';
 import { scopeLabels } from '../lib/oidc/claims.js';
 import { OidcError, RedirectableError } from '../lib/oidc/errors.js';
@@ -48,7 +49,7 @@ class OidcController extends Controller {
         if (params.prompt.includes('none')) {
           throw new RedirectableError('login_required', 'The user must sign in again.', params.redirectUri, params.state);
         }
-        return Reply.redirect(this.loginUrl(frontend, req.raw.originalUrl, params.loginHint));
+        return Reply.redirect(this.loginUrl(frontend, this.loginReturnTo(req.raw.originalUrl), params.loginHint));
       }
 
       if (!user) {
@@ -132,6 +133,16 @@ class OidcController extends Controller {
       if (!client.isConfidential()) {
         throw new OidcError('invalid_client', 'Introspection needs a confidential client.', 401);
       }
+      if (config('ratelimit.enabled')) {
+        const limit = Limit.perMinute(600).by(client.clientId);
+        const key = `oidc-introspect:${limit.key}`;
+        const count = await RateLimiter.hit(key, limit.decaySeconds);
+        if (count > limit.maxAttempts) {
+          return Reply.json({ error: 'slow_down', error_description: 'Too many requests.' }, 429)
+            .headers(NO_STORE)
+            .header('Retry-After', String(await RateLimiter.availableIn(key)));
+        }
+      }
       return Reply.json(await introspect(client, req.body)).headers(NO_STORE);
     } catch (error) {
       return this.tokenFailure(error);
@@ -168,6 +179,15 @@ class OidcController extends Controller {
     url.searchParams.set('return_to', returnTo);
     if (loginHint) url.searchParams.set('login_hint', loginHint);
     return url.toString();
+  }
+
+  private loginReturnTo(originalUrl: string): string {
+    const url = new URL(originalUrl, config('app.url'));
+    const prompts = (url.searchParams.get('prompt') ?? '').split(/\s+/).filter((value) => value && value !== 'login');
+    if (prompts.length) url.searchParams.set('prompt', prompts.join(' '));
+    else url.searchParams.delete('prompt');
+    url.searchParams.delete('max_age');
+    return `${url.pathname}${url.search}${url.hash}`;
   }
 
   private async authTime(req: HttpRequest): Promise<Date> {

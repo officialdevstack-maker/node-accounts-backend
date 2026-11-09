@@ -1,5 +1,5 @@
-import bcrypt from "bcryptjs"
 import Auth from "../lib/auth/index.js"
+import { verifyPassword } from "../lib/auth/password.js"
 import { Controller, type HttpRequest } from "../lib/core/controller/index.js"
 import Validator from "../lib/core/validation/Validator.js"
 import { Activity } from "../models/Activity.js"
@@ -46,7 +46,11 @@ class AuthenticationController extends Controller {
         const email = String(data.email).trim().toLowerCase()
         const user = await User.findByEmailWithPassword(email)
 
-        if (!user || !(await bcrypt.compare(String(data.password), String(user.getHidden('password'))))) {
+        const passwordValid = await verifyPassword(
+            String(data.password),
+            user ? String(user.getHidden('password')) : undefined,
+        )
+        if (!user || !passwordValid) {
             if (user) {
                 await Activity.record(user.id, 'login_failed', { ip: req.ip(), userAgent: req.userAgent() })
             }

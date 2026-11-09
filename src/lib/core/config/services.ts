@@ -23,4 +23,9 @@ export const servicesConfig = {
     webhookHash: env.string('FLW_WEBHOOK_HASH'),
     baseUrl: env.string('FLW_BASE_URL', 'https://api.flutterwave.com/v3'),
   },
+
+  internal: {
+    allowedIps: env.list('INTERNAL_ALLOWED_IPS'),
+    sharedSecret: env.string('INTERNAL_SHARED_SECRET'),
+  },
 };

@@ -3,6 +3,8 @@ import Auth from '../lib/auth/index.js';
 import { Controller } from '../lib/core/controller/index.js';
 import { AccessToken } from '../models/AccessToken.js';
 import { Activity } from '../models/Activity.js';
+import { OAuthCode } from '../models/OAuthCode.js';
+import { OAuthRefreshToken } from '../models/OAuthRefreshToken.js';
 import { User } from '../models/User.js';
 import type { ChangePasswordRequest } from '../requests/ChangePasswordRequest.js';
 
@@ -21,6 +23,10 @@ class ChangePasswordController extends Controller {
 
     await AccessToken.destroyByUser(user.id);
     await user.update({ password: data.password });
+    await Promise.all([
+      OAuthRefreshToken.destroyForUser(user.id),
+      OAuthCode.destroyForUser(user.id),
+    ]);
     await Activity.record(user.id, 'password_changed', {
       ip: req.ip(),
       userAgent: req.userAgent(),
