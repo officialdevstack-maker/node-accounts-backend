@@ -1,62 +1,74 @@
+// src/models/EmailVerification.ts
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { config } from '../lib/core/config/index.js';
-import { DB } from '../lib/core/query/index.js';
-
-const TABLE = 'email_verifications';
-
-export interface EmailVerificationRecord {
-  userId: number;
-  codeHash: string;
-  attempts: number;
-  expiresAt: Date;
-  createdAt: Date;
-}
+import { Model, type Cast } from '../lib/core/model/index.js';
 
 const hash = (userId: number, code: string): string =>
   createHmac('sha256', config('auth.jwt.secret')).update(`${userId}:${code}`).digest('hex');
 
-export const EmailVerification = {
-  async issue(userId: number, code: string, ttlMinutes: number): Promise<void> {
-    const now = new Date();
-    await DB.table(TABLE).upsert(
-      [
-        {
-          user_id: userId,
-          code_hash: hash(userId, code),
-          attempts: 0,
-          expires_at: new Date(now.getTime() + ttlMinutes * 60_000),
-          created_at: now,
-          updated_at: now,
-        },
-      ],
-      ['user_id'],
-      ['code_hash', 'attempts', 'expires_at', 'created_at', 'updated_at'],
-    );
-  },
+export class EmailVerification extends Model {
+  static table = 'email_verification_codes'; // must match the migration
+  static fillable = ['userId', 'codeHash', 'attempts', 'expiresAt'];
+  static hidden = ['codeHash'];
+  static casts: Record<string, Cast> = {
+    id: 'int',
+    userId: 'int',
+    attempts: 'int',
+    expiresAt: 'date',
+    createdAt: 'date',
+    updatedAt: 'date',
+  };
+  static columns: Record<string, string> = {
+    userId: 'user_id',
+    codeHash: 'code_hash',
+    expiresAt: 'expires_at',
+    createdAt: 'created_at',
+    updatedAt: 'updated_at',
+  };
 
-  async find(userId: number): Promise<EmailVerificationRecord | null> {
-    const row = await DB.table(TABLE).where('user_id', userId).first();
-    if (!row) return null;
-    return {
-      userId: Number(row.user_id),
-      codeHash: String(row.code_hash),
-      attempts: Number(row.attempts),
-      expiresAt: new Date(row.expires_at),
-      createdAt: new Date(row.created_at),
+  declare id: number;
+  declare userId: number;
+  declare codeHash: string;
+  declare attempts: number;
+  declare expiresAt: Date;
+  declare createdAt: Date;
+  declare updatedAt: Date;
+
+  /** The user's current code row (one per user), with the hidden hash loaded so matches() works. */
+  static forUser(userId: number) {
+    return EmailVerification.query().withHidden().where('user_id', userId).first();
+  }
+
+  /** Creates or replaces the user's code. */
+  static async issue(userId: number, code: string, ttlMinutes: number): Promise<EmailVerification> {
+    const data = {
+      codeHash: hash(userId, code),
+      attempts: 0,
+      expiresAt: new Date(Date.now() + ttlMinutes * 60_000),
     };
-  },
 
-  matches(record: EmailVerificationRecord, code: string): boolean {
-    const storedHash = Buffer.from(record.codeHash, 'hex');
-    const candidateHash = Buffer.from(hash(record.userId, code), 'hex');
-    return storedHash.length === candidateHash.length && timingSafeEqual(storedHash, candidateHash);
-  },
+    const existing = await EmailVerification.forUser(userId);
+    if (existing) return existing.update(data);
+    return EmailVerification.create({ userId, ...data });
+  }
 
-  async recordFailure(userId: number): Promise<void> {
-    await DB.table(TABLE).where('user_id', userId).increment('attempts', 1, { updated_at: new Date() });
-  },
+  /** Delete the user's row, if any (after a successful verification). */
+  static async destroy(userId: number): Promise<void> {
+    const existing = await EmailVerification.forUser(userId);
+    if (existing) await existing.delete();
+  }
 
-  async destroy(userId: number): Promise<void> {
-    await DB.table(TABLE).where('user_id', userId).delete();
-  },
-};
+  isExpired(): boolean {
+    return this.expiresAt.getTime() <= Date.now();
+  }
+
+  matches(code: string): boolean {
+    const stored = Buffer.from(String(this.getHidden('codeHash')), 'hex');
+    const candidate = Buffer.from(hash(this.userId, code), 'hex');
+    return stored.length === candidate.length && timingSafeEqual(stored, candidate);
+  }
+
+  async recordFailure(): Promise<void> {
+    await this.increment('attempts', 1);
+  }
+}

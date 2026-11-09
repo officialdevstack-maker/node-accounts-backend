@@ -24,11 +24,15 @@ export class ColumnBuilder {
   isUnique = false;
   isPrimary = false;
   isAutoIncrement = false;
+  isChange = false;
+  isFirst = false;
+  afterColumn: string | undefined = undefined;
+  commentText: string | undefined = undefined;
   foreign: ForeignKey | undefined = undefined;
 
   constructor(
     readonly name: string,
-    readonly type: string,
+    public type: string,
     private readonly blueprint: Blueprint,
   ) {}
 
@@ -47,6 +51,10 @@ export class ColumnBuilder {
   /** DEFAULT CURRENT_TIMESTAMP */
   useCurrent(): this {
     return this.default(new Raw('CURRENT_TIMESTAMP'));
+  }
+
+  useCurrentOnUpdate(): this {
+    return this.default(new Raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'));
   }
 
   unique(): this {
@@ -75,6 +83,34 @@ export class ColumnBuilder {
     return this.references(table ?? pluralize(this.name.replace(/_id$/, '')), column);
   }
 
+  unsigned(): this {
+    if (!/UNSIGNED/i.test(this.type)) this.type += ' UNSIGNED';
+    return this;
+  }
+
+  comment(text: string): this {
+    this.commentText = text;
+    return this;
+  }
+
+  /** ALTER only: place the column after another one. */
+  after(column: string): this {
+    this.afterColumn = column;
+    return this;
+  }
+
+  /** ALTER only: place the column first. */
+  first(): this {
+    this.isFirst = true;
+    return this;
+  }
+
+  /** ALTER only: redefine an existing column (MODIFY COLUMN). Repeat every modifier you want to keep. */
+  change(): this {
+    this.isChange = true;
+    return this;
+  }
+
   onDelete(action: ReferentialAction): this {
     if (this.foreign) this.foreign.onDelete = action;
     return this;
@@ -95,11 +131,14 @@ export class ColumnBuilder {
   }
 
   /** The column definition as it appears in CREATE TABLE / ADD COLUMN. */
-  sql(): string {
+  sql(withPosition = false): string {
     const parts = [quoteId(this.name), this.type, this.isNullable ? 'NULL' : 'NOT NULL'];
     if (this.hasDefault) parts.push(`DEFAULT ${quoteValue(this.defaultValue)}`);
     if (this.isAutoIncrement) parts.push('AUTO_INCREMENT');
     if (this.isUnique) parts.push('UNIQUE');
+    if (this.commentText !== undefined) parts.push(`COMMENT ${quoteValue(this.commentText)}`);
+    if (withPosition && this.isFirst) parts.push('FIRST');
+    else if (withPosition && this.afterColumn) parts.push(`AFTER ${quoteId(this.afterColumn)}`);
     return parts.join(' ');
   }
 }
@@ -107,6 +146,7 @@ export class ColumnBuilder {
 export class Blueprint {
   readonly columns: ColumnBuilder[] = [];
   readonly indexes: IndexDefinition[] = [];
+  private readonly drops: string[] = [];
 
   constructor(readonly table: string) {}
 
@@ -156,16 +196,48 @@ export class Blueprint {
     return this.add(name, `VARCHAR(${Math.trunc(length)})`);
   }
 
-  text(name: string): ColumnBuilder {
-    return this.add(name, 'TEXT');
+  char(name: string, length = 255): ColumnBuilder {
+    return this.add(name, `CHAR(${Math.trunc(length)})`);
+  }
+
+  tinyInteger(name: string): ColumnBuilder {
+    return this.add(name, 'TINYINT');
+  }
+
+  smallInteger(name: string): ColumnBuilder {
+    return this.add(name, 'SMALLINT');
+  }
+
+  mediumInteger(name: string): ColumnBuilder {
+    return this.add(name, 'MEDIUMINT');
   }
 
   integer(name: string): ColumnBuilder {
     return this.add(name, 'INT');
   }
 
+  unsignedInteger(name: string): ColumnBuilder {
+    return this.add(name, 'INT UNSIGNED');
+  }
+
   bigInteger(name: string): ColumnBuilder {
     return this.add(name, 'BIGINT');
+  }
+
+  unsignedBigInteger(name: string): ColumnBuilder {
+    return this.add(name, 'BIGINT UNSIGNED');
+  }
+
+  text(name: string): ColumnBuilder {
+    return this.add(name, 'TEXT');
+  }
+
+  mediumText(name: string): ColumnBuilder {
+    return this.add(name, 'MEDIUMTEXT');
+  }
+
+  longText(name: string): ColumnBuilder {
+    return this.add(name, 'LONGTEXT');
   }
 
   boolean(name: string): ColumnBuilder {
@@ -175,6 +247,10 @@ export class Blueprint {
   /** Use for money: decimal('amount', 14, 2) */
   decimal(name: string, precision = 10, scale = 2): ColumnBuilder {
     return this.add(name, `DECIMAL(${Math.trunc(precision)}, ${Math.trunc(scale)})`);
+  }
+
+  double(name: string): ColumnBuilder {
+    return this.add(name, 'DOUBLE');
   }
 
   float(name: string): ColumnBuilder {
@@ -202,10 +278,41 @@ export class Blueprint {
     return this.dateTime(name);
   }
 
-  /** created_at + updated_at (nullable, filled in by your code). */
-  timestamps(): void {
-    this.dateTime('created_at').nullable();
-    this.dateTime('updated_at').nullable();
+  time(name: string): ColumnBuilder {
+    return this.add(name, 'TIME');
+  }
+
+  year(name: string): ColumnBuilder {
+    return this.add(name, 'YEAR');
+  }
+
+  binary(name: string): ColumnBuilder {
+    return this.add(name, 'BLOB');
+  }
+
+  ipAddress(name = 'ip_address'): ColumnBuilder {
+    return this.add(name, 'VARCHAR(45)');
+  }
+
+  ulid(name = 'id'): ColumnBuilder {
+    return this.add(name, 'CHAR(26)');
+  }
+
+  rememberToken(): ColumnBuilder {
+    return this.string('remember_token', 100).nullable();
+  }
+
+  /** created_at + updated_at. With `useCurrent`, the database fills them even for raw inserts. */
+  timestamps(useCurrent = false): void {
+    const created = this.dateTime('created_at');
+    const updated = this.dateTime('updated_at');
+    if (useCurrent) {
+      created.default(new Raw('CURRENT_TIMESTAMP'));
+      updated.default(new Raw('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'));
+    } else {
+      created.nullable();
+      updated.nullable();
+    }
   }
 
   softDeletes(name = 'deleted_at'): ColumnBuilder {
@@ -220,6 +327,23 @@ export class Blueprint {
   /** Composite unique constraint: t.unique(['user_id', 'wallet_id']). For one column use .unique() on it. */
   unique(fields: string | string[], options: { name?: string } = {}): void {
     this.indexes.push({ fields: [fields].flat(), unique: true, name: options.name });
+  }
+
+  dropColumn(...names: string[]): void {
+    for (const name of names) this.drops.push(`DROP COLUMN ${quoteId(name)}`);
+  }
+
+  dropIndex(name: string): void {
+    this.drops.push(`DROP INDEX ${quoteId(name)}`);
+  }
+
+  dropUnique(name: string): void {
+    this.dropIndex(name);
+  }
+
+  dropForeign(columnOrName: string): void {
+    const name = columnOrName.endsWith('_foreign') ? columnOrName : `${this.table}_${columnOrName}_foreign`;
+    this.drops.unshift(`DROP FOREIGN KEY ${quoteId(name)}`);
   }
 
   // ---- compiling --------------------------------------------------------------------------
@@ -256,10 +380,19 @@ export class Blueprint {
   /** One statement per change, for schema.table(). */
   alterSql(): string[] {
     const alter = `ALTER TABLE ${quoteId(this.table)}`;
-    return [
-      ...this.columns.map((c) => `${alter} ADD COLUMN ${c.sql()}`),
-      ...this.indexes.map((i) => `${alter} ADD ${this.indexSql(i)}`),
-      ...this.columns.map((c) => this.foreignSql(c)).filter((s): s is string => Boolean(s)).map((s) => `${alter} ADD ${s}`),
-    ];
+    const statements: string[] = [];
+
+    for (const column of this.columns) {
+      const sql = column.sql(true);
+      statements.push(`${alter} ${column.isChange ? 'MODIFY COLUMN' : 'ADD COLUMN'} ${sql}`);
+    }
+
+    for (const index of this.indexes) statements.push(`${alter} ADD ${this.indexSql(index)}`);
+    for (const column of this.columns) {
+      const sql = this.foreignSql(column);
+      if (sql) statements.push(`${alter} ADD ${sql}`);
+    }
+    for (const drop of this.drops) statements.push(`${alter} ${drop}`);
+    return statements;
   }
 }

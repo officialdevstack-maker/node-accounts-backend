@@ -55,8 +55,19 @@ export class Schema {
     await this.raw(`ALTER TABLE ${quoteId(table)} DROP COLUMN ${quoteId(column)}`);
   }
 
+  async dropForeign(table: string, columnOrConstraintName: string): Promise<void> {
+    const name = columnOrConstraintName.endsWith('_foreign')
+      ? columnOrConstraintName
+      : `${table}_${columnOrConstraintName}_foreign`;
+    await this.raw(`ALTER TABLE ${quoteId(table)} DROP FOREIGN KEY ${quoteId(name)}`);
+  }
+
   async renameColumn(table: string, from: string, to: string): Promise<void> {
     await this.raw(`ALTER TABLE ${quoteId(table)} RENAME COLUMN ${quoteId(from)} TO ${quoteId(to)}`);
+  }
+
+  async dropUnique(table: string, name: string): Promise<void> {
+    await this.dropIndex(table, name);
   }
 
   /** Pass the index name, or the column list for an index created without a custom name. */

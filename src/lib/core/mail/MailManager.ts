@@ -17,6 +17,9 @@ export class MailManager {
         transporter = nodemailer.createTransport({
           ...mailConfig.mailers.smtp,
           pool: true,
+          connectionTimeout: 15_000,
+          greetingTimeout: 15_000,
+          socketTimeout: 30_000,
         });
         break;
       case 'log':

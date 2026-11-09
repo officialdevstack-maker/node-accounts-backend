@@ -8,7 +8,7 @@ export class User extends Model {
   static table = 'users';
   static fillable = ['fullname', 'email', 'password', 'phone', 'accountType'];
   static hidden = ['password'];
-  static columns = { isVerified: 'isVerified', createdAt: 'createdAt', updatedAt: 'updatedAt'};
+  static columns = { isVerified: 'isVerified' };
   static casts: Record<string, Cast> = { id: 'int', isVerified: 'boolean' };
 
   declare id: number;
