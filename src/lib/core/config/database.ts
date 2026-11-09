@@ -14,6 +14,11 @@ export const databaseConfig = {
 
   logging: env.bool('DB_LOGGING', false),
   timezone: env.string('DB_TIMEZONE', '+01:00'), // WAT
+  ssl: {
+    enabled: env.bool('DB_SSL', false),
+    ca: env.string('DB_SSL_CA') || undefined,
+    rejectUnauthorized: env.bool('DB_SSL_REJECT_UNAUTHORIZED', true),
+  },
 
   pool: {
     max: env.number('DB_POOL_MAX', 10),

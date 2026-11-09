@@ -41,12 +41,21 @@ export class PendingMail {
 
   /** Fire-and-forget with retries (does not block the request). */
   queue(mailable: Mailable): void {
-    MailQueue.push(() => this.send(mailable));
+    void this.enqueue(mailable);
   }
 
   /** Same as queue() but delayed. */
   later(delayMs: number, mailable: Mailable): void {
-    MailQueue.push(() => this.send(mailable), delayMs);
+    void this.enqueue(mailable, delayMs);
+  }
+
+  private async enqueue(mailable: Mailable, delayMs = 0): Promise<void> {
+    try {
+      const options = await mailable.toMailOptions({ to: this._to, cc: this._cc, bcc: this._bcc });
+      await MailQueue.pushMail(options, this._mailer, delayMs);
+    } catch (error) {
+      console.error('[mail:queue] could not enqueue message', error);
+    }
   }
 }
 

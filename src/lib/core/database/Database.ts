@@ -12,6 +12,13 @@ export class Database {
     if (this.conn) return this.conn;
 
     const pool = config('database.pool');
+    const databaseSsl = config('database.ssl');
+    const ssl = databaseSsl.enabled
+      ? {
+          rejectUnauthorized: databaseSsl.rejectUnauthorized,
+          ...(databaseSsl.ca ? { ca: databaseSsl.ca } : {}),
+        }
+      : undefined;
     this.pool = mysql.createPool({
       host: config('database.host'),
       port: config('database.port'),
@@ -25,6 +32,7 @@ export class Database {
       maxIdle: pool.max,
       idleTimeout: pool.idleMs,
       connectTimeout: pool.acquireMs,
+      ...(ssl ? { ssl } : {}),
     });
 
     if (config('database.logging') && !this.logging) {

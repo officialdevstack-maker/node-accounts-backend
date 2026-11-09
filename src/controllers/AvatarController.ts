@@ -1,9 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-import { config } from '../lib/core/config/index.js';
 import { Controller, type HttpRequest } from '../lib/core/controller/index.js';
 import { Reply } from '../lib/core/response/index.js';
+import { avatarStorage } from '../lib/storage/avatar-storage.js';
 import { Activity } from '../models/Activity.js';
 import type { User } from '../models/User.js';
 
@@ -13,8 +11,6 @@ const MIME_TYPES = {
   jpg: 'image/jpeg',
   webp: 'image/webp',
 } as const;
-
-const avatarDir = () => resolve(process.cwd(), config('storage.disks.public.root'), 'avatars');
 
 function detectType(buffer: Buffer): keyof typeof MIME_TYPES | null {
   if (
@@ -38,13 +34,7 @@ function detectType(buffer: Buffer): keyof typeof MIME_TYPES | null {
 
 export async function removeFile(filename: string | null | undefined): Promise<void> {
   if (!filename || !FILE_PATTERN.test(filename)) return;
-
-  try {
-    await unlink(join(avatarDir(), filename));
-  } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return;
-    throw error;
-  }
+  await avatarStorage().delete(filename);
 }
 
 class AvatarController extends Controller {
@@ -53,18 +43,12 @@ class AvatarController extends Controller {
     const match = FILE_PATTERN.exec(filename);
     if (!match) this.abort(404, 'Not found.');
 
-    try {
-      const buffer = await readFile(join(avatarDir(), filename));
-      const extension = match[1] as keyof typeof MIME_TYPES;
-      return Reply.raw(buffer, MIME_TYPES[extension])
-        .header('Cache-Control', 'public, max-age=31536000, immutable')
-        .header('X-Content-Type-Options', 'nosniff');
-    } catch (error) {
-      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
-        this.abort(404, 'Not found.');
-      }
-      throw error;
-    }
+    const buffer = await avatarStorage().get(filename);
+    if (!buffer) this.abort(404, 'Not found.');
+    const extension = match[1] as keyof typeof MIME_TYPES;
+    return Reply.raw(buffer, MIME_TYPES[extension])
+      .header('Cache-Control', 'public, max-age=31536000, immutable')
+      .header('X-Content-Type-Options', 'nosniff');
   }
 
   async update(req: HttpRequest) {
@@ -78,9 +62,7 @@ class AvatarController extends Controller {
     if (!extension) this.abort(422, 'Only PNG, JPEG or WebP images are allowed.');
 
     const filename = `${user.id}-${randomUUID()}.${extension}`;
-    const path = join(avatarDir(), filename);
-    await mkdir(avatarDir(), { recursive: true });
-    await writeFile(path, body, { flag: 'wx' });
+    await avatarStorage().put(filename, body, MIME_TYPES[extension]);
 
     const previous = user.avatar;
     try {

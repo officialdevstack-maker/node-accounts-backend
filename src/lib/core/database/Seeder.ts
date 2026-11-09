@@ -1,5 +1,6 @@
 // database/Seeder.ts
 // Base class for files in database/seeders/. Generate one with:  artisan make:seeder UserSeeder
+import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import type { Connection } from '../query/Connection.js';
 import { Database } from './Database.js';
@@ -28,21 +29,16 @@ export abstract class Seeder {
 export async function loadSeeder(name: string): Promise<SeederClass> {
   if (!/^[A-Za-z][A-Za-z0-9]*$/.test(name)) throw new Error(`"${name}" is not a valid seeder class name.`);
 
-  const file = databasePath('seeders', `${name}.ts`);
-  let module: Record<string, unknown>;
-  try {
-    module = (await import(pathToFileURL(file).href)) as Record<string, unknown>;
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') {
-      throw new Error(`Seeder "${name}" not found (looked for database/seeders/${name}.ts).`);
-    }
-    throw error;
-  }
+  const file = ['ts', 'js']
+    .map((extension) => databasePath('seeders', `${name}.${extension}`))
+    .find(existsSync);
+  if (!file) throw new Error(`Seeder "${name}" not found (looked for database/seeders/${name}.ts or .js).`);
+
+  const module = (await import(pathToFileURL(file).href)) as Record<string, unknown>;
 
   const Class = module[name] ?? module.default;
   if (typeof Class !== 'function' || !(Class.prototype instanceof Seeder)) {
-    throw new Error(`database/seeders/${name}.ts must export a class "${name}" that extends Seeder.`);
+    throw new Error(`${file} must export a class "${name}" that extends Seeder.`);
   }
   return Class as SeederClass;
 }

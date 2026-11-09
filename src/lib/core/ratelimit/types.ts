@@ -5,7 +5,7 @@ export interface RateLimitEntry {
   resetAt: number;
 }
 
-/** Where counters live. MemoryStore is the default; write a Redis one later and call RateLimiter.useStore(...). */
+/** Where counters live. The boot provider selects MemoryStore or RedisStore from config. */
 export interface RateLimitStore {
   /** Add one hit. Starts a new window of `decaySeconds` when none is active. Must be atomic. */
   hit(key: string, decaySeconds: number): Promise<RateLimitEntry>;

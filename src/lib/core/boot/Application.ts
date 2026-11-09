@@ -40,11 +40,18 @@ export class Application {
   async start(port: number = config('app.port')): Promise<Server> {
     await this.bootstrap();
 
-    const server = await new Promise<Server>((resolve, reject) => {
-      const listener = this.express.listen(port, (error?: Error) => {
-        if (error) reject(error);
-        else resolve(listener);
-      });
+    const server = this.express.listen(port, '0.0.0.0');
+    await new Promise<void>((resolve, reject) => {
+      const onError = (error: Error) => {
+        server.off('listening', onListening);
+        reject(error);
+      };
+      const onListening = () => {
+        server.off('error', onError);
+        resolve();
+      };
+      server.once('error', onError);
+      server.once('listening', onListening);
     });
 
     this.server = server;
