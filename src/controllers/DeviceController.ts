@@ -9,7 +9,7 @@ class DeviceController extends Controller {
     const currentId = req.auth.currentTokenId();
     const devices = await AccessToken.forUser(user.id);
 
-    return this.ok(devices.map((device) => ({ ...device, current: device.id === currentId })));
+    return this.ok(devices.map((device) => device.toDevice(currentId)));
   }
 
   async destroy(req: HttpRequest) {

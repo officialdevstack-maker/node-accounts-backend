@@ -47,7 +47,7 @@ export class Guard {
     const plain = randomBytes(40).toString("hex");
     const userAgent = this.req.get("user-agent")?.slice(0, 255);
 
-    this._tokenId = await AccessToken.create({
+    const record = await AccessToken.issue({
       userId: user.id,
       tokenHash: sha256(plain),
       expiresAt: new Date(Date.now() + (remember ? REMEMBER_MS : SHORT_MS)),
@@ -55,6 +55,7 @@ export class Guard {
       ipAddress: this.req.ip ?? null,
       userAgent: userAgent ?? null,
     });
+    this._tokenId = record.id;
 
     return plain;
   }

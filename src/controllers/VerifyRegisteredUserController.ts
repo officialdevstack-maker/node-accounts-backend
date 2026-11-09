@@ -1,3 +1,4 @@
+// src/controllers/VerifyRegisteredUserController.ts
 import { Controller, type HttpRequest } from "../lib/core/controller/index.js"
 import { config } from "../lib/core/config/index.js"
 import { Mail, WelcomeMail } from "../lib/core/mail/index.js"
@@ -26,26 +27,26 @@ class VerifyRegisteredUserController extends Controller {
 
         if (user.isVerified) return this.ok({ user }, 'Email already verified.')
 
-        const record = await EmailVerification.find(user.id)
-        if (!record || record.expiresAt.getTime() <= Date.now()) return this.invalidCode()
+        // Look up by user_id (with the hidden code hash loaded), not by the row's primary key.
+        const record = await EmailVerification.forUser(user.id)
+        if (!record || record.isExpired()) return this.invalidCode()
 
         const maxAttempts = config('auth.otp.maxAttempts')
         if (record.attempts >= maxAttempts) {
-            await EmailVerification.destroy(user.id)
+            await record.delete()
             return this.abort(429, 'Too many attempts. Request a new code.')
         }
 
-        if (!EmailVerification.matches(record, code)) {
-            await EmailVerification.recordFailure(user.id)
-            const failedRecord = await EmailVerification.find(user.id)
-            if (failedRecord && failedRecord.attempts >= maxAttempts) {
-                await EmailVerification.destroy(user.id)
+        if (!record.matches(code)) {
+            await record.recordFailure()
+            if (record.attempts >= maxAttempts) {
+                await record.delete()
                 return this.abort(429, 'Too many attempts. Request a new code.')
             }
             return this.invalidCode()
         }
 
-        await EmailVerification.destroy(user.id)
+        await record.delete()
         user.isVerified = true
         await user.save()
         await Activity.record(user.id, 'email_verified', {
