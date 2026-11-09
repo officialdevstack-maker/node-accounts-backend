@@ -1,8 +1,11 @@
 import "../middleware/kernel.js";
 import { Route } from "../lib/core/routing/index.js";
 import { authenticationController } from "../controllers/AuthenticationController.js";
+import { activityController } from "../controllers/ActivityController.js";
 import { changePasswordController } from "../controllers/ChangePasswordController.js";
+import { deviceController } from "../controllers/DeviceController.js";
 import { forgotPasswordController } from "../controllers/ForgotPasswordController.js";
+import { preferenceController } from "../controllers/PreferenceController.js";
 import { registerUserController } from "../controllers/RegisterUserController.js";
 import { resetPasswordController } from "../controllers/ResetPasswordController.js";
 import { verifyRegisteredUserController } from "../controllers/VerifyRegisteredUserController.js";
@@ -17,7 +20,13 @@ Route.group({ prefix: "/auth", as: "auth." }, () => {
   Route.post("/reset-password", [resetPasswordController, "create"]).request(ResetPasswordRequest).middleware("throttle:auth").name("reset-password");
 
   Route.middleware("auth").group(() => {
+    Route.get("/preferences", [preferenceController, "show"]).name("preferences.show");
+    Route.patch("/preferences", [preferenceController, "update"]).name("preferences.update");
     Route.post("/logout", [authenticationController, "delete"]).name("logout");
+    Route.get("/devices", [deviceController, "index"]).name("devices.index");
+    Route.post("/devices/logout-others", [deviceController, "destroyOthers"]).name("devices.logout-others");
+    Route.delete("/devices/{id}", [deviceController, "destroy"]).whereNumber("id").name("devices.destroy");
+    Route.get("/activity", [activityController, "index"]).name("activity.index");
     Route.get("/profile", [authenticationController, "show"]).name("profile");
     Route.post("/verify-email", [verifyRegisteredUserController, "create"]).middleware("throttle:5,1").name("verify-email.send");
     Route.post("/resend-verification", [verifyRegisteredUserController, "create"]).middleware("throttle:5,1").name("verify-email.resend");

@@ -1,5 +1,6 @@
 import { Controller } from '../lib/core/controller/index.js';
 import { AccessToken } from '../models/AccessToken.js';
+import { Activity } from '../models/Activity.js';
 import { PasswordReset } from '../models/PasswordReset.js';
 import { User } from '../models/User.js';
 import type { ResetPasswordRequest } from '../requests/ResetPasswordRequest.js';
@@ -20,6 +21,7 @@ class ResetPasswordController extends Controller {
     await user.update({ password: data.password });
     await PasswordReset.destroyByEmail(user.email);
     await AccessToken.destroyByUser(user.id);
+    await Activity.record(user.id, 'password_reset');
 
     return this.ok(undefined, 'Your password has been reset. You can now sign in.');
   }

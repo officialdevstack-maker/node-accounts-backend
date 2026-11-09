@@ -7,6 +7,9 @@ import bcrypt from "bcryptjs";
 import { config } from "../core/config/index.js";
 import { User } from "../../models/User.js";
 import { AccessToken } from "../../models/AccessToken.js";
+import { Activity, type ActivityContext } from "../../models/Activity.js";
+import { describeDevice } from "./device.js";
+import { notifyIfNewDevice } from "./alerts.js";
 
 const COOKIE_NAME = "auth_token";
 const SHORT_MS = config("auth.tokens.shortHours") * 60 * 60 * 1000;
@@ -21,11 +24,16 @@ export class Guard {
   private _user: User | null = null;
   private _resolved = false;
   private _issuedToken: string | null = null; // plain token, only exists on the request that created it
+  private _tokenId: number | null = null;
 
   constructor(
     private readonly req: Request,
     private readonly res: Response
   ) {}
+
+  private context(): ActivityContext {
+    return { ip: this.req.ip, userAgent: this.req.get("user-agent") };
+  }
 
   /** Reads the token from "Authorization: Bearer xxx", falling back to the cookie. */
   private extractToken(): string | null {
@@ -37,13 +45,16 @@ export class Guard {
   /** Creates a token row and returns the plain token (shown once, never stored). */
   async createToken(user: User, remember = false): Promise<string> {
     const plain = randomBytes(40).toString("hex");
+    const userAgent = this.req.get("user-agent")?.slice(0, 255);
 
-    await AccessToken.create({
+    this._tokenId = await AccessToken.create({
       userId: user.id,
       tokenHash: sha256(plain),
       expiresAt: new Date(Date.now() + (remember ? REMEMBER_MS : SHORT_MS)),
+      deviceName: describeDevice(userAgent),
+      ipAddress: this.req.ip ?? null,
+      userAgent: userAgent ?? null,
     });
-
 
     return plain;
   }
@@ -57,6 +68,7 @@ export class Guard {
   }
 
   async login(user: User, remember = false): Promise<User | null> {
+    const userAgent = this.req.get("user-agent")?.slice(0, 255);
     const token = await this.createToken(user, remember);
     this._issuedToken = token;
 
@@ -70,6 +82,13 @@ export class Guard {
 
     this._user = await User.find(user.id);
     this._resolved = true;
+
+    if (this._user) {
+      const ctx = this.context();
+      await notifyIfNewDevice(this._user, ctx);
+      void Activity.record(this._user.id, "login", ctx);
+    }
+
     return this._user;
   }
 
@@ -88,9 +107,14 @@ export class Guard {
     const record = await AccessToken.findValid(sha256(plain));
     if (!record) return null;
 
+    this._tokenId = record.id;
     this._user = await User.find(record.userId);
     if (this._user) void AccessToken.touch(record.id).catch(() => {});
     return this._user;
+  }
+
+  currentTokenId(): number | null {
+    return this._tokenId;
   }
 
   async check(): Promise<boolean> {
@@ -108,8 +132,12 @@ export class Guard {
 
   /** Revokes the current token (now async). */
   async logout(): Promise<void> {
+    const user = await this.user();
     const plain = this.extractToken();
     if (plain) await AccessToken.destroyByHash(sha256(plain));
+    if (user) {
+      await Activity.record(user.id, "logout", { ip: this.req.ip, userAgent: this.req.get("user-agent") });
+    }
 
     this.res.clearCookie(COOKIE_NAME);
     this._user = null;
@@ -120,7 +148,10 @@ export class Guard {
   /** Revokes every token the user has (log out of all devices). */
   async logoutAll(): Promise<void> {
     const id = await this.id();
-    if (id) await AccessToken.destroyByUser(id);
+    if (id) {
+      await AccessToken.destroyByUser(id);
+      await Activity.record(id, "logout_all", { ip: this.req.ip, userAgent: this.req.get("user-agent") });
+    }
 
     this.res.clearCookie(COOKIE_NAME);
     this._user = null;
@@ -142,7 +173,9 @@ export class Auth {
   }
 
   static attempt(credentials: Credentials, remember?: boolean) { return Auth.guard().attempt(credentials, remember); }
-  static login(user: User, remember?: boolean) { return Auth.guard().login(user, remember); }
+  static login(user: User, remember?: boolean) {
+    return Auth.guard().login(user, remember);
+  }
   static token() { return Auth.guard().token(); }
   static user() { return Auth.guard().user(); }
   static check() { return Auth.guard().check(); }

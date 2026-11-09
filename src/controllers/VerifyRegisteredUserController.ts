@@ -3,6 +3,7 @@ import { config } from "../lib/core/config/index.js"
 import { Mail, WelcomeMail } from "../lib/core/mail/index.js"
 import { sendVerificationCode } from "../lib/auth/verification.js"
 import { EmailVerification } from "../models/EmailVerification.js"
+import { Activity } from "../models/Activity.js"
 import type { User } from "../models/User.js"
 
 class VerifyRegisteredUserController extends Controller {
@@ -47,6 +48,10 @@ class VerifyRegisteredUserController extends Controller {
         await EmailVerification.destroy(user.id)
         user.isVerified = true
         await user.save()
+        await Activity.record(user.id, 'email_verified', {
+            ip: req.ip(),
+            userAgent: req.userAgent(),
+        })
 
         Mail.to(user.email).queue(new WelcomeMail(user))
 
