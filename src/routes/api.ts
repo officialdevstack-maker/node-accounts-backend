@@ -8,10 +8,12 @@ import { changePasswordController } from "../controllers/ChangePasswordControlle
 import { deviceController } from "../controllers/DeviceController.js";
 import { forgotPasswordController } from "../controllers/ForgotPasswordController.js";
 import { preferenceController } from "../controllers/PreferenceController.js";
+import { privacyController } from "../controllers/PrivacyController.js";
 import { registerUserController } from "../controllers/RegisterUserController.js";
 import { resetPasswordController } from "../controllers/ResetPasswordController.js";
 import { verifyRegisteredUserController } from "../controllers/VerifyRegisteredUserController.js";
 import { ChangePasswordRequest } from "../requests/ChangePasswordRequest.js";
+import { DeleteAccountRequest } from "../requests/DeleteAccountRequest.js";
 import { ForgotPasswordRequest } from "../requests/ForgotPasswordRequest.js";
 import { RegisterUserRequest } from "../requests/RegisterUserRequest.js";
 import { ResetPasswordRequest } from "../requests/ResetPasswordRequest.js";
@@ -41,6 +43,8 @@ Route.group({ prefix: "/auth", as: "auth." }, () => {
     Route.post("/resend-verification", [verifyRegisteredUserController, "create"]).middleware("throttle:5,1").name("verify-email.resend");
     Route.post("/verify-email/confirm", [verifyRegisteredUserController, "store"]).middleware("throttle:10,1").name("verify-email.confirm");
     Route.post("/change-password", [changePasswordController, "update"]).request(ChangePasswordRequest).middleware("throttle:auth").name("change-password");
+    Route.get("/privacy/export", [privacyController, "export"]).middleware("throttle:5,1").name("privacy.export");
+    Route.post("/delete-account", [privacyController, "destroy"]).request(DeleteAccountRequest).middleware("throttle:5,1").name("account.destroy");
   });
 
   Route.post("/register", [registerUserController, "create"]).request(RegisterUserRequest).middleware("throttle:auth").name("register");

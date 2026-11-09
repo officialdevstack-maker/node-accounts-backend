@@ -14,7 +14,8 @@ export type ActivityEvent =
   | 'device_revoked'
   | 'profile_updated'
   | 'avatar_updated'
-  | 'avatar_removed';
+  | 'avatar_removed'
+  | 'data_exported';
 
 export interface ActivityContext {
   ip?: string | undefined;
@@ -74,5 +75,14 @@ export const Activity = {
       .orderByDesc('id')
       .paginate(perPage, page);
     return { ...result, data: result.data.map(hydrate) };
+  },
+
+  async exportFor(userId: number, limit = 1000) {
+    const rows = await DB.table(TABLE)
+      .where('user_id', userId)
+      .orderByDesc('id')
+      .limit(limit)
+      .get();
+    return rows.map(hydrate);
   },
 };

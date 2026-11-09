@@ -36,7 +36,7 @@ function detectType(buffer: Buffer): keyof typeof MIME_TYPES | null {
   return null;
 }
 
-async function removeAvatarFile(filename: string | null | undefined): Promise<void> {
+export async function removeFile(filename: string | null | undefined): Promise<void> {
   if (!filename || !FILE_PATTERN.test(filename)) return;
 
   try {
@@ -88,7 +88,7 @@ class AvatarController extends Controller {
       await user.save();
     } catch (error) {
       try {
-        await removeAvatarFile(filename);
+        await removeFile(filename);
       } catch (cleanupError) {
         console.error('[avatar] could not remove upload after save failure', cleanupError);
       }
@@ -96,7 +96,7 @@ class AvatarController extends Controller {
     }
 
     try {
-      await removeAvatarFile(previous);
+      await removeFile(previous);
     } catch (error) {
       console.error('[avatar] could not remove replaced photo', error);
     }
@@ -113,7 +113,7 @@ class AvatarController extends Controller {
       user.forceFill({ avatar: null });
       await user.save();
       try {
-        await removeAvatarFile(previous);
+        await removeFile(previous);
       } catch (error) {
         console.error('[avatar] could not remove deleted photo', error);
       }
