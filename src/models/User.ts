@@ -8,6 +8,7 @@ export class User extends Model {
   static table = 'users';
   static fillable = ['fullname', 'email', 'password', 'phone', 'accountType'];
   static hidden = ['password'];
+  static appends = ['avatarUrl'];
   static columns = { isVerified: 'isVerified' };
   static casts: Record<string, Cast> = { id: 'int', isVerified: 'boolean' };
 
@@ -16,10 +17,16 @@ export class User extends Model {
   declare email: string;
   declare password: string;
   declare phone: string | null;
+  declare avatar: string | null;
+  declare avatarUrl: string | null;
   declare isVerified: boolean;
   declare accountType: AccountType;
   declare createdAt: Date;
   declare updatedAt: Date;
+
+  getAvatarUrlAttribute(): string | null {
+    return this.avatar ? `/api/auth/avatars/${this.avatar}` : null;
+  }
 
   protected async saving(): Promise<void> {
     if (this.isDirty('password')) this.password = await bcrypt.hash(this.password, config('auth.bcryptRounds'));

@@ -11,7 +11,10 @@ export type ActivityEvent =
   | 'password_changed'
   | 'password_reset'
   | 'email_verified'
-  | 'device_revoked';
+  | 'device_revoked'
+  | 'profile_updated'
+  | 'avatar_updated'
+  | 'avatar_removed';
 
 export interface ActivityContext {
   ip?: string | undefined;

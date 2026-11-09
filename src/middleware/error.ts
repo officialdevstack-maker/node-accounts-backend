@@ -45,6 +45,9 @@ export function errorHandler(
   } else if (err instanceof jwt.JsonWebTokenError) {
     status = 401;
     message = "Invalid or expired token.";
+  } else if (typeof err === "object" && err !== null && (err as { type?: string }).type === "entity.too.large") {
+    status = 413;
+    message = "That image is too large.";
   } else if (err instanceof SyntaxError && "body" in (err as object)) {
     // malformed JSON body from express.json()
     status = 400;

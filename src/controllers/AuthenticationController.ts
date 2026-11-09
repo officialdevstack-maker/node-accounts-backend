@@ -4,10 +4,32 @@ import { Controller, type HttpRequest } from "../lib/core/controller/index.js"
 import Validator from "../lib/core/validation/Validator.js"
 import { Activity } from "../models/Activity.js"
 import { User } from "../models/User.js"
+import type { UpdateProfileRequest } from "../requests/UpdateProfileRequest.js"
 
 class AuthenticationController extends Controller {
     show(req: HttpRequest) {
         return this.ok(req.user, 'Successfully fetched user')
+    }
+
+    async update(req: UpdateProfileRequest) {
+        const user = this.user<User>(req)
+        const data = req.validated<{ fullname: string; phone: string }>()
+
+        const changed: string[] = []
+        if (data.fullname !== user.fullname) changed.push('fullname')
+        if (data.phone !== (user.phone ?? '')) changed.push('phone')
+
+        if (changed.length) {
+            await user.update({ fullname: data.fullname, phone: data.phone })
+            await Activity.record(
+                user.id,
+                'profile_updated',
+                { ip: req.ip(), userAgent: req.userAgent() },
+                { fields: changed },
+            )
+        }
+
+        return this.ok(user, 'Profile updated.')
     }
 
     async create(req: HttpRequest) {
