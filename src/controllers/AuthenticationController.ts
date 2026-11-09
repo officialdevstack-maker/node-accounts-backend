@@ -60,6 +60,8 @@ class AuthenticationController extends Controller {
             })
         }
 
+        if (user.suspendedAt) this.abort(403, 'This account has been suspended.')
+
         const authUser = await Auth.login(user, false)
         const token = Auth.token()
 

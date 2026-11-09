@@ -10,7 +10,12 @@ export class User extends Model {
   static hidden = ['password'];
   static appends = ['avatarUrl'];
   static columns = { isVerified: 'isVerified' };
-  static casts: Record<string, Cast> = { id: 'int', isVerified: 'boolean' };
+  static casts: Record<string, Cast> = {
+    id: 'int',
+    isVerified: 'boolean',
+    isAdmin: 'boolean',
+    suspendedAt: 'date',
+  };
 
   declare id: number;
   declare fullname: string;
@@ -20,6 +25,8 @@ export class User extends Model {
   declare avatar: string | null;
   declare avatarUrl: string | null;
   declare isVerified: boolean;
+  declare isAdmin: boolean;
+  declare suspendedAt: Date | null;
   declare accountType: AccountType;
   declare createdAt: Date;
   declare updatedAt: Date;

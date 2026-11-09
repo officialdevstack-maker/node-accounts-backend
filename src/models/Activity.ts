@@ -17,7 +17,11 @@ export type ActivityEvent =
   | 'avatar_removed'
   | 'data_exported'
   | 'app_connected'
-  | 'app_revoked';
+  | 'app_revoked'
+  | 'user_suspended'
+  | 'user_unsuspended'
+  | 'user_verified_by_admin'
+  | 'sessions_revoked_by_admin';
 
 export interface ActivityContext {
   ip?: string | undefined;

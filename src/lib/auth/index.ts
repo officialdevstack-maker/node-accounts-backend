@@ -116,6 +116,7 @@ export class Guard {
 
     this._tokenId = record.id;
     this._user = await User.find(record.userId);
+    if (this._user?.suspendedAt) this._user = null;
     if (this._user) void AccessToken.touch(record.id).catch(() => {});
     return this._user;
   }

@@ -1,11 +1,13 @@
 import { throttle } from '../lib/core/ratelimit/index.js';
 import { Middleware } from '../lib/core/routing/index.js';
+import { adminOnly } from './admin.js';
 import { authMiddleware } from './auth.js';
 import { internalNetwork } from './internal.js';
 import { serviceAuth } from './service.js';
 import './limiters.js';
 
 Middleware.alias('auth', () => authMiddleware);
+Middleware.alias('admin', () => adminOnly);
 Middleware.alias('internal', () => internalNetwork);
 Middleware.alias('service', (...scopes) => serviceAuth(...scopes));
 Middleware.alias('throttle', (limiter = '60', decay = '1') =>

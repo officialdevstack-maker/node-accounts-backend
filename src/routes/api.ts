@@ -2,6 +2,7 @@ import "../middleware/kernel.js";
 import express from "express";
 import { Route } from "../lib/core/routing/index.js";
 import { authenticationController } from "../controllers/AuthenticationController.js";
+import { adminUserController } from "../controllers/AdminUserController.js";
 import { activityController } from "../controllers/ActivityController.js";
 import { avatarController } from "../controllers/AvatarController.js";
 import { changePasswordController } from "../controllers/ChangePasswordController.js";
@@ -77,6 +78,15 @@ Route.group({ prefix: "/internal", as: "internal." }, () => {
     .middleware("internal", "service:users:read")
     .whereNumber("id")
     .name("users.show");
+});
+
+Route.group({ prefix: "/admin", as: "admin.", middleware: ["auth", "admin", "throttle:120,1"] }, () => {
+  Route.get("/users", [adminUserController, "index"]).name("users.index");
+  Route.get("/users/{id}", [adminUserController, "show"]).whereNumber("id").name("users.show");
+  Route.post("/users/{id}/suspend", [adminUserController, "suspend"]).whereNumber("id").name("users.suspend");
+  Route.post("/users/{id}/unsuspend", [adminUserController, "unsuspend"]).whereNumber("id").name("users.unsuspend");
+  Route.post("/users/{id}/revoke-sessions", [adminUserController, "revokeSessions"]).whereNumber("id").name("users.revoke-sessions");
+  Route.post("/users/{id}/verify-email", [adminUserController, "verifyEmail"]).whereNumber("id").name("users.verify-email");
 });
 
 export const apiV1Route = Route.router();
