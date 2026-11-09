@@ -36,7 +36,9 @@ export default class OidcClientCreateCommand extends DatabaseCommand {
     if (clientCredentialsEnabled && isPublic) {
       throw new CliError('--client-credentials requires a confidential client; remove --public.');
     }
-    if (service && redirects.length) throw new CliError('--redirect is not used for service clients.');
+    if (clientCredentialsEnabled && redirects.length) {
+      throw new CliError('--redirect is not used for client-credentials clients.');
+    }
 
     validateUris(redirects, 'redirect', true);
     const postLogoutRedirectUris = list(this.option('logout-redirect'));

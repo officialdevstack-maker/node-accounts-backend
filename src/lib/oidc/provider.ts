@@ -253,7 +253,11 @@ export async function userinfo(token: string | null | undefined): Promise<Claims
     claims.scopes.some((scope) => !grant.scopes.includes(scope))
   ) return null;
   const client = await OAuthClient.findByClientId(claims.clientId);
-  if (!client?.isActive || grant.oauthClientId !== client.id) return null;
+  if (
+    !client?.isActive ||
+    grant.oauthClientId !== client.id ||
+    claims.scopes.some((scope) => !client.allowedScopes.includes(scope))
+  ) return null;
 
   const user = await User.find(grant.userId);
   if (!user) return null;

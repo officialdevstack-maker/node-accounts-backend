@@ -72,6 +72,11 @@ export abstract class Grammar {
   }
   abstract truncate(table: string): Compiled[];
 
+  /** Statement that opens a transaction. */
+  beginTransaction(): string {
+    return 'BEGIN';
+  }
+
   compileSelect(query: QueryBuilder): Compiled {
     const s: CompileState = { bindings: [] };
     return { sql: this.select(query, s), bindings: s.bindings };

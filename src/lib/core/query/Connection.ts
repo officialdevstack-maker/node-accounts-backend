@@ -1,30 +1,30 @@
-import type { Pool, PoolConnection, ResultSetHeader } from 'mysql2/promise';
 import { QueryBuilder } from './Builder.js';
+import type { DatabaseDriver, PinnedRunner, Runner } from './drivers/types.js';
 import { grammarFor, type Grammar } from './grammar/index.js';
 import { Raw } from './Raw.js';
 import { normalizeBinding } from './support.js';
 import type { ExecResult, QueryEvent, Row } from './types.js';
 
-type Runner = { query(sql: string, values?: unknown[]): Promise<[unknown, unknown]> };
-
 export class Connection {
   static readonly listeners: Array<(event: QueryEvent) => void> = [];
 
-  readonly grammar: Grammar = grammarFor('mysql');
+  readonly grammar: Grammar;
   private inTransaction = false;
 
-  /** `session` is set when this connection is pinned to one physical connection (transactions, SET ...). */
+  /** `pinned` is set when this connection is bound to one physical connection (transactions, SET ...). */
   constructor(
-    private readonly pool: Pool,
-    private readonly pinned?: PoolConnection,
-  ) {}
+    private readonly driver: DatabaseDriver,
+    private readonly pinned?: PinnedRunner,
+  ) {
+    this.grammar = grammarFor(driver.dialect);
+  }
 
   get dialect(): string {
     return this.grammar.dialect;
   }
 
   private get runner(): Runner {
-    return (this.pinned ?? this.pool) as unknown as Runner;
+    return this.pinned ?? this.driver;
   }
 
   table(name: string | Raw): QueryBuilder {
@@ -40,9 +40,7 @@ export class Connection {
   }
 
   async select(sql: string, bindings: readonly unknown[] = []): Promise<Row[]> {
-    const params = bindings.map(normalizeBinding);
-    const [rows] = await this.run(sql, params, () => this.runner.query(sql, params));
-    return rows as Row[];
+    return (await this.execute(sql, bindings)).rows;
   }
 
   async selectOne(sql: string, bindings: readonly unknown[] = []): Promise<Row | null> {
@@ -68,21 +66,16 @@ export class Connection {
 
   async execute(sql: string, bindings: readonly unknown[] = []): Promise<ExecResult> {
     const params = bindings.map(normalizeBinding);
-    const [result] = await this.run(sql, params, () => this.runner.query(sql, params));
-
-    if (Array.isArray(result)) return { rows: result as Row[], affectedRows: result.length, insertId: undefined };
-
-    const header = result as ResultSetHeader;
-    return { rows: [], affectedRows: Number(header.affectedRows ?? 0), insertId: header.insertId || undefined };
+    return this.run(sql, params, () => this.runner.run(sql, params));
   }
 
   /** Run `callback` on one physical connection (needed for SET ..., transactions). */
   async session<T>(callback: (connection: Connection) => Promise<T>): Promise<T> {
     if (this.pinned) return callback(this);
 
-    const physical = await this.pool.getConnection();
+    const physical = await this.driver.acquire();
     try {
-      return await callback(new Connection(this.pool, physical));
+      return await callback(new Connection(this.driver, physical));
     } finally {
       physical.release();
     }
@@ -93,13 +86,13 @@ export class Connection {
 
     return this.session(async (trx) => {
       trx.inTransaction = true;
-      await trx.statement('START TRANSACTION');
+      await trx.statement(this.grammar.beginTransaction());
       try {
         const result = await callback(trx);
-        await trx.statement('COMMIT');
+        await trx.statement(this.dialect === 'sqlite' ? 'COMMIT' : 'COMMIT');
         return result;
       } catch (error) {
-        await trx.statement('ROLLBACK').catch(() => undefined);
+        await trx.statement(this.dialect === 'sqlite' ? 'ROLLBACK' : 'ROLLBACK').catch(() => undefined);
         throw error;
       }
     });

@@ -9,7 +9,7 @@ export class DbVerifyCommand extends DatabaseCommand {
 
   async handle(): Promise<number> {
     const target = `${config('database.host')}:${config('database.port')}/${config('database.name')} as ${config('database.username')}`;
-    this.comment(`Connecting to mysql (${target}) ...`);
+    this.comment(`Connecting to ${config('database.default', 'mysql')} (${target}) ...`);
 
     try {
       await Database.authenticate();

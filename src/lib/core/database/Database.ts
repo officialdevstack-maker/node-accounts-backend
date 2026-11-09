@@ -1,16 +1,17 @@
-import mysql, { type Pool } from 'mysql2/promise';
 import { config } from '../config/index.js';
 import { Connection } from '../query/Connection.js';
+import type { DatabaseDriver } from '../query/drivers/types.js';
+import { createMySqlDriver } from './drivers/MySqlDriver.js';
+import { createPostgresDriver } from './drivers/PostgresDriver.js';
+import { createSqliteDriver } from './drivers/SqliteDriver.js';
 
 export class Database {
-  private static pool: Pool | undefined;
+  private static driver: DatabaseDriver | undefined;
   private static conn: Connection | undefined;
   private static logging = false;
 
-  /** The shared connection. Created lazily, nothing connects until the first query. */
-  static connection(): Connection {
-    if (this.conn) return this.conn;
-
+  private static resolveDriver(): DatabaseDriver {
+    const defaultDriver = config('database.default', 'mysql');
     const pool = config('database.pool');
     const databaseSsl = config('database.ssl');
     const ssl = databaseSsl.enabled
@@ -19,28 +20,47 @@ export class Database {
           ...(databaseSsl.ca ? { ca: databaseSsl.ca } : {}),
         }
       : undefined;
-    this.pool = mysql.createPool({
-      host: config('database.host'),
-      port: config('database.port'),
-      user: config('database.username'),
-      password: config('database.password'),
-      database: config('database.name'),
-      timezone: config('database.timezone'),
-      charset: 'UTF8MB4_UNICODE_CI',
-      waitForConnections: true,
-      connectionLimit: pool.max,
-      maxIdle: pool.max,
-      idleTimeout: pool.idleMs,
-      connectTimeout: pool.acquireMs,
-      ...(ssl ? { ssl } : {}),
-    });
+
+    switch (defaultDriver) {
+      case 'pgsql':
+        return createPostgresDriver({
+          host: config('database.host'),
+          port: config('database.port'),
+          username: config('database.username'),
+          password: config('database.password'),
+          name: config('database.name'),
+          ...(ssl ? { ssl } : {}),
+          pool,
+        });
+      case 'sqlite':
+        return createSqliteDriver(config('database.sqlite.path'));
+      case 'mysql':
+      default:
+        return createMySqlDriver({
+          host: config('database.host'),
+          port: config('database.port'),
+          username: config('database.username'),
+          password: config('database.password'),
+          name: config('database.name'),
+          timezone: config('database.timezone'),
+          ...(ssl ? { ssl } : {}),
+          pool,
+        });
+    }
+  }
+
+  /** The shared connection. Created lazily, nothing connects until the first query. */
+  static connection(): Connection {
+    if (this.conn) return this.conn;
+
+    this.driver = this.resolveDriver();
 
     if (config('database.logging') && !this.logging) {
       this.logging = true;
       Connection.listeners.push((event) => console.log(event.sql));
     }
 
-    this.conn = new Connection(this.pool);
+    this.conn = new Connection(this.driver);
     return this.conn;
   }
 
@@ -50,9 +70,9 @@ export class Database {
   }
 
   static async close(): Promise<void> {
-    const pool = this.pool;
-    this.pool = undefined;
+    const driver = this.driver;
+    this.driver = undefined;
     this.conn = undefined;
-    await pool?.end();
+    await driver?.close();
   }
 }

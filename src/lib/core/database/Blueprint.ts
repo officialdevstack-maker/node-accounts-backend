@@ -1,4 +1,6 @@
+import { config } from '../config/index.js';
 import { Raw } from '../query/Raw.js';
+import { schemaGrammarFor } from './grammar/index.js';
 import { pluralize, quoteId, quoteValue } from './support.js';
 
 export type ReferentialAction = 'CASCADE' | 'SET NULL' | 'RESTRICT' | 'NO ACTION' | 'SET DEFAULT';
@@ -146,7 +148,7 @@ export class ColumnBuilder {
 export class Blueprint {
   readonly columns: ColumnBuilder[] = [];
   readonly indexes: IndexDefinition[] = [];
-  private readonly drops: string[] = [];
+  readonly drops: string[] = [];
 
   constructor(readonly table: string) {}
 
@@ -367,32 +369,11 @@ export class Blueprint {
   }
 
   createSql(): string {
-    const primary = this.columns.filter((c) => c.isPrimary).map((c) => quoteId(c.name));
-    const lines = [
-      ...this.columns.map((c) => c.sql()),
-      ...(primary.length ? [`PRIMARY KEY (${primary.join(', ')})`] : []),
-      ...this.indexes.map((i) => this.indexSql(i)),
-      ...this.columns.map((c) => this.foreignSql(c)).filter((s): s is string => Boolean(s)),
-    ];
-    return `CREATE TABLE ${quoteId(this.table)} (\n  ${lines.join(',\n  ')}\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`;
+    return schemaGrammarFor(config('database.default', 'mysql')).createTable(this.table, this);
   }
 
   /** One statement per change, for schema.table(). */
   alterSql(): string[] {
-    const alter = `ALTER TABLE ${quoteId(this.table)}`;
-    const statements: string[] = [];
-
-    for (const column of this.columns) {
-      const sql = column.sql(true);
-      statements.push(`${alter} ${column.isChange ? 'MODIFY COLUMN' : 'ADD COLUMN'} ${sql}`);
-    }
-
-    for (const index of this.indexes) statements.push(`${alter} ADD ${this.indexSql(index)}`);
-    for (const column of this.columns) {
-      const sql = this.foreignSql(column);
-      if (sql) statements.push(`${alter} ADD ${sql}`);
-    }
-    for (const drop of this.drops) statements.push(`${alter} ${drop}`);
-    return statements;
+    return schemaGrammarFor(config('database.default', 'mysql')).alterTable(this.table, this);
   }
 }

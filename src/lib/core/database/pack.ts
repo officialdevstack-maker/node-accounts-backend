@@ -13,7 +13,7 @@ import { MigrateStatusCommand } from './commands/MigrateStatusCommand.js';
 
 export default definePack({
   name: 'database',
-  description: 'MySQL connection, migrations and seeders',
+  description: 'Database connections, migrations and seeders',
   commands: [
     MigrateCommand,
     MigrateRollbackCommand,
