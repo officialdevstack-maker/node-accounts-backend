@@ -1,0 +1,49 @@
+name: Backend CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      APP_URL: http://localhost:3000
+      FRONTEND_URL: http://localhost:5173
+      OIDC_ISSUER: http://localhost:3000/api/oidc
+      DB_HOST: 127.0.0.1
+      DB_PORT: "3306"
+      DB_NAME: node_accounts_test
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      DB_SSL: "false"
+      JWT_SECRET: test-only-jwt-secret
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: node_accounts_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: node dist/lib/core/artisan.js list
+      - run: node dist/lib/core/artisan.js model:check
+      - run: node dist/lib/core/artisan.js query:check

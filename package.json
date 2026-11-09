@@ -13,7 +13,8 @@
     "artisan": "tsx src/lib/core/artisan.ts",
     "artisan:prod": "node dist/lib/core/artisan.js",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "lint": "eslint src test",
+    "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1164.0",
@@ -37,7 +38,11 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
     "@types/node": "^26.6.6",
+    "@types/supertest": "^6.0.3",
+    "eslint": "^10.14.0",
+    "supertest": "^7.3.2",
     "tsx": "^4.23.15",
-    "typescript": "~5.9.3"
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.1"
   }
 }
