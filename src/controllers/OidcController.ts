@@ -21,6 +21,7 @@ import {
 } from '../lib/oidc/provider.js';
 import { str } from '../lib/oidc/util.js';
 import { AccessToken } from '../models/AccessToken.js';
+import { OAuthClient } from '../models/OAuthClient.js';
 import { OAuthRefreshToken } from '../models/OAuthRefreshToken.js';
 import type { User } from '../models/User.js';
 
@@ -33,6 +34,16 @@ class OidcController extends Controller {
 
   jwks() {
     return Reply.json(publicJwks()).header('Cache-Control', 'public, max-age=300');
+  }
+
+  async clientInfo(req: HttpRequest) {
+    const clientId = str(req.query('client_id'));
+    if (!clientId) return Reply.json({ error: 'invalid_request' }, 400).headers(NO_STORE);
+
+    const client = await OAuthClient.findByClientId(clientId);
+    if (!client?.isActive) return Reply.json({ error: 'not_found' }, 404).headers(NO_STORE);
+
+    return Reply.json({ name: client.name, logoUri: client.logoUri }).headers(NO_STORE);
   }
 
   async authorize(req: HttpRequest) {

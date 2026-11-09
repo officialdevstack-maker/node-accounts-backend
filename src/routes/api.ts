@@ -58,6 +58,7 @@ Route.group({ prefix: "/auth", as: "auth." }, () => {
 Route.group({ prefix: "/oidc", as: "oidc." }, () => {
   Route.get("/.well-known/openid-configuration", [oidcController, "discovery"]).name("discovery");
   Route.get("/jwks", [oidcController, "jwks"]).name("jwks");
+  Route.get("/client-info", [oidcController, "clientInfo"]).middleware("throttle:60,1").name("client-info");
   Route.get("/authorize", [oidcController, "authorize"]).middleware("throttle:60,1").name("authorize");
   Route.post("/token", [oidcController, "token"]).middleware("throttle:60,1").name("token");
   Route.post("/introspect", [oidcController, "introspect"]).name("introspect");
