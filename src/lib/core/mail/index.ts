@@ -14,6 +14,7 @@ export { VerifyEmailMail } from './mailables/VerifyEmailMail.js';
 export { ResetPasswordMail } from './mailables/ResetPasswordMail.js';
 export { OtpMail } from './mailables/OtpMail.js';
 export { NewDeviceLoginMail } from './mailables/NewDeviceLoginMail.js';
+export { LoginAlertMail } from './mailables/LoginAlertMail.js';
 // const mail = Mail
 // export default Mail
 export { WelcomeHeresMail } from './mailables/WelcomeHeresMail.js';

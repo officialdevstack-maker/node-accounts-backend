@@ -9,7 +9,7 @@ import { User } from "../../models/User.js";
 import { AccessToken } from "../../models/AccessToken.js";
 import { Activity, type ActivityContext } from "../../models/Activity.js";
 import { describeDevice } from "./device.js";
-import { notifyIfNewDevice } from "./alerts.js";
+import { notifyOnLogin } from "./alerts.js";
 
 const COOKIE_NAME = "auth_token";
 const SHORT_MS = config("auth.tokens.shortHours") * 60 * 60 * 1000;
@@ -86,7 +86,7 @@ export class Guard {
 
     if (this._user) {
       const ctx = this.context();
-      await notifyIfNewDevice(this._user, ctx);
+      await notifyOnLogin(this._user, ctx);
       void Activity.record(this._user.id, "login", ctx);
     }
 

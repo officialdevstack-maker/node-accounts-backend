@@ -34,7 +34,7 @@ export class NewDeviceLoginMail extends Mailable {
               `<strong>Time:</strong> ${e(when)}`,
           ) +
           paragraph('If this was you, no action is needed. If not, change your password and sign out your other devices right away.') +
-          button(`${config('app.frontendUrl')}/settings/security`, 'Review your devices') +
+          button(`${config('app.frontendUrl')}/profile#security`, 'Review your devices') +
           paragraph('You can turn these alerts off in your account preferences.'),
       }),
     );
