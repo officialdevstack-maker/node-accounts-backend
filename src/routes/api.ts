@@ -8,6 +8,7 @@ import { changePasswordController } from "../controllers/ChangePasswordControlle
 import { connectedAppController } from "../controllers/ConnectedAppController.js";
 import { deviceController } from "../controllers/DeviceController.js";
 import { forgotPasswordController } from "../controllers/ForgotPasswordController.js";
+import { internalUserController } from "../controllers/InternalUserController.js";
 import { oidcController } from "../controllers/OidcController.js";
 import { preferenceController } from "../controllers/PreferenceController.js";
 import { privacyController } from "../controllers/PrivacyController.js";
@@ -59,6 +60,7 @@ Route.group({ prefix: "/oidc", as: "oidc." }, () => {
   Route.get("/jwks", [oidcController, "jwks"]).name("jwks");
   Route.get("/authorize", [oidcController, "authorize"]).middleware("throttle:60,1").name("authorize");
   Route.post("/token", [oidcController, "token"]).middleware("throttle:60,1").name("token");
+  Route.post("/introspect", [oidcController, "introspect"]).middleware("throttle:60,1").name("introspect");
   Route.match(["get", "post"], "/userinfo", [oidcController, "userinfo"]).name("userinfo");
   Route.post("/revoke", [oidcController, "revoke"]).middleware("throttle:60,1").name("revoke");
   Route.get("/logout", [oidcController, "logout"]).name("logout");
@@ -67,6 +69,13 @@ Route.group({ prefix: "/oidc", as: "oidc." }, () => {
     Route.get("/consent", [oidcController, "consentShow"]).name("consent.show");
     Route.post("/consent", [oidcController, "consentStore"]).name("consent.store");
   });
+});
+
+Route.group({ prefix: "/internal", as: "internal." }, () => {
+  Route.get("/users/{id}", [internalUserController, "show"])
+    .middleware("service:users:read")
+    .whereNumber("id")
+    .name("users.show");
 });
 
 export const apiV1Route = Route.router();

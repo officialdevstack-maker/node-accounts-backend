@@ -11,7 +11,9 @@ import {
   errorRedirect,
   exchangeCode,
   grantAccess,
+  introspect,
   needsConsent,
+  clientCredentialsToken,
   refreshTokens,
   resolveLogout,
   userinfo,
@@ -38,11 +40,22 @@ class OidcController extends Controller {
       const user = await Auth.user();
       const frontend = config('app.frontendUrl');
 
+      const requestLogin = params.prompt.includes('login') ||
+        (Boolean(user) &&
+          params.maxAge !== undefined &&
+          Math.floor(Date.now() / 1000) - Math.floor((await this.authTime(req)).getTime() / 1000) > params.maxAge);
+      if (user && requestLogin) {
+        if (params.prompt.includes('none')) {
+          throw new RedirectableError('login_required', 'The user must sign in again.', params.redirectUri, params.state);
+        }
+        return Reply.redirect(this.loginUrl(frontend, req.raw.originalUrl, params.loginHint));
+      }
+
       if (!user) {
         if (params.prompt.includes('none')) {
           throw new RedirectableError('login_required', 'The user is not signed in.', params.redirectUri, params.state);
         }
-        return Reply.redirect(`${frontend}/login?return_to=${encodeURIComponent(req.raw.originalUrl)}`);
+        return Reply.redirect(this.loginUrl(frontend, req.raw.originalUrl, params.loginHint));
       }
 
       if (await needsConsent(user, params)) {
@@ -95,8 +108,10 @@ class OidcController extends Controller {
           return Reply.json(await exchangeCode(client, req.body)).headers(NO_STORE);
         case 'refresh_token':
           return Reply.json(await refreshTokens(client, req.body)).headers(NO_STORE);
+        case 'client_credentials':
+          return Reply.json(clientCredentialsToken(client, req.body)).headers(NO_STORE);
         default:
-          throw new OidcError('unsupported_grant_type', 'Use authorization_code or refresh_token.');
+          throw new OidcError('unsupported_grant_type', 'Use authorization_code, refresh_token, or client_credentials.');
       }
     } catch (error) {
       return this.tokenFailure(error);
@@ -109,6 +124,18 @@ class OidcController extends Controller {
       return Reply.json({ error: 'invalid_token' }, 401).header('WWW-Authenticate', 'Bearer realm="oidc", error="invalid_token"');
     }
     return Reply.json(claims).headers(NO_STORE);
+  }
+
+  async introspect(req: HttpRequest) {
+    try {
+      const client = await authenticateClient(req.header('authorization'), req.body);
+      if (!client.isConfidential()) {
+        throw new OidcError('invalid_client', 'Introspection needs a confidential client.', 401);
+      }
+      return Reply.json(await introspect(client, req.body)).headers(NO_STORE);
+    } catch (error) {
+      return this.tokenFailure(error);
+    }
   }
 
   async revoke(req: HttpRequest) {
@@ -134,6 +161,13 @@ class OidcController extends Controller {
 
   private context(req: HttpRequest) {
     return { ip: req.ip(), userAgent: req.userAgent() };
+  }
+
+  private loginUrl(frontend: string, returnTo: string, loginHint?: string): string {
+    const url = new URL('/login', frontend);
+    url.searchParams.set('return_to', returnTo);
+    if (loginHint) url.searchParams.set('login_hint', loginHint);
+    return url.toString();
   }
 
   private async authTime(req: HttpRequest): Promise<Date> {

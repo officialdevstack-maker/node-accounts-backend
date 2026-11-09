@@ -9,8 +9,8 @@ import { config } from '../core/config/index.js';
 import type { AuthorizeParams } from './authorize-request.js';
 import { claimsFor, type Claims } from './claims.js';
 import { OidcError } from './errors.js';
-import { signingKey } from './keys.js';
-import { signAccessToken, signIdToken, verifyAccessToken } from './tokens.js';
+import { verificationKey } from './keys.js';
+import { signAccessToken, signIdToken, signServiceToken, verifyAccessToken } from './tokens.js';
 import { pkceChallenge, safeEqual, str, withParams } from './util.js';
 
 export function errorRedirect(redirectUri: string, state: string | undefined, error: string, description?: string): string {
@@ -88,13 +88,14 @@ async function respond(input: {
   nonce?: string | undefined;
   refreshToken?: string | undefined;
 }): Promise<Record<string, unknown>> {
+  const accessToken = signAccessToken({
+    userId: input.user.id,
+    clientId: input.client.clientId,
+    grantId: input.grantId,
+    scopes: input.scopes,
+  });
   const body: Record<string, unknown> = {
-    access_token: signAccessToken({
-      userId: input.user.id,
-      clientId: input.client.clientId,
-      grantId: input.grantId,
-      scopes: input.scopes,
-    }),
+    access_token: accessToken,
     token_type: 'Bearer',
     expires_in: config('oidc.accessTtl'),
     scope: input.scopes.join(' '),
@@ -107,6 +108,7 @@ async function respond(input: {
       scopes: input.scopes,
       nonce: input.nonce,
       authTime: input.authTime,
+      accessToken,
     });
   }
   if (input.refreshToken) body.refresh_token = input.refreshToken;
@@ -163,6 +165,9 @@ export async function refreshTokens(client: OAuthClient, body: Record<string, un
   if (!token) throw new OidcError('invalid_request', 'refresh_token is required.');
 
   const result = await OAuthRefreshToken.rotate(token);
+  if (result.status === 'duplicate') {
+    throw invalidGrant('Refresh token was already rotated. Retry using the latest refresh token.');
+  }
   if (result.status === 'reused') {
     await OAuthRefreshToken.destroyForGrant(result.grantId);
     throw invalidGrant('Refresh token reuse detected. Sign in again.');
@@ -194,12 +199,57 @@ export async function refreshTokens(client: OAuthClient, body: Record<string, un
   });
 }
 
+export function clientCredentialsToken(client: OAuthClient, body: Record<string, unknown>): Record<string, unknown> {
+  if (!client.isConfidential()) {
+    throw new OidcError('invalid_client', 'Client credentials require a confidential client.', 401);
+  }
+  if (!client.isFirstParty()) {
+    throw new OidcError('unauthorized_client', 'Only first-party clients may use client_credentials.');
+  }
+  if (!client.clientCredentialsEnabled) {
+    throw new OidcError('unauthorized_client', 'The client credentials grant is not enabled for this client.', 401);
+  }
+
+  const serviceScopes = config('oidc.serviceScopes');
+  const configuredServiceScopes = client.allowedScopes.filter((scope) => serviceScopes.includes(scope));
+  const isServiceClient = configuredServiceScopes.length > 0;
+  const allowed = isServiceClient
+    ? configuredServiceScopes
+    : client.allowedScopes.filter((scope) => scope !== 'openid' && scope !== 'offline_access');
+  const requested = str(body.scope)?.split(/\s+/).filter(Boolean);
+  const scopes = requested ?? allowed;
+  if (!scopes.length) throw new OidcError('invalid_scope', 'At least one client-credentials scope is required.');
+  if (
+    scopes.some((scope) => !allowed.includes(scope)) ||
+    (isServiceClient && client.allowedScopes.some((scope) => !serviceScopes.includes(scope)))
+  ) {
+    throw new OidcError('invalid_scope', 'Requested scope is not allowed for this client.');
+  }
+
+  return {
+    access_token: isServiceClient
+      ? signServiceToken({ clientId: client.clientId, scopes })
+      : signAccessToken({
+          subject: client.clientId,
+          clientId: client.clientId,
+          grantId: 0,
+          grantType: 'client_credentials',
+          scopes,
+        }),
+    token_type: 'Bearer',
+    expires_in: isServiceClient ? config('oidc.serviceTtl') : config('oidc.accessTtl'),
+    scope: scopes.join(' '),
+  };
+}
+
 export async function userinfo(token: string | null | undefined): Promise<Claims | null> {
   const claims = token ? verifyAccessToken(token) : null;
-  if (!claims) return null;
+  if (!claims || claims.grantType !== 'authorization_code') return null;
 
   const grant = await OAuthGrant.find(claims.gid);
   if (!grant || String(grant.userId) !== claims.sub) return null;
+  const client = await OAuthClient.findByClientId(claims.clientId);
+  if (!client?.isActive) return null;
 
   const user = await User.find(grant.userId);
   if (!user) return null;
@@ -208,13 +258,48 @@ export async function userinfo(token: string | null | undefined): Promise<Claims
   return claimsFor(user, claims.scopes);
 }
 
+export async function introspect(
+  client: OAuthClient,
+  body: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const token = str(body.token);
+  const claims = token ? verifyAccessToken(token) : null;
+  if (!claims) return { active: false };
+  if (claims.clientId !== client.clientId && !client.isFirstParty()) return { active: false };
+
+  if (claims.grantType === 'client_credentials') {
+    const tokenClient = await OAuthClient.findByClientId(claims.clientId);
+    if (!tokenClient?.isActive || !tokenClient.clientCredentialsEnabled) return { active: false };
+  } else {
+    const grant = await OAuthGrant.find(claims.gid);
+    if (!grant || String(grant.userId) !== claims.sub) return { active: false };
+    const tokenClient = await OAuthClient.findByClientId(claims.clientId);
+    if (!tokenClient?.isActive) return { active: false };
+  }
+
+  return {
+    active: true,
+    sub: claims.sub,
+    client_id: claims.clientId,
+    scope: claims.scopes.join(' '),
+    token_type: 'Bearer',
+    iss: config('oidc.issuer'),
+    aud: claims.clientId,
+    exp: claims.exp,
+  };
+}
+
 export async function resolveLogout(query: Record<string, unknown>): Promise<string | null> {
   const hint = str(query.id_token_hint);
   if (!hint) throw new OidcError('invalid_request', 'id_token_hint is required to sign out.');
 
   let audience: string | undefined;
   try {
-    const payload = jwt.verify(hint, signingKey().publicPem, {
+    const decoded = jwt.decode(hint, { complete: true });
+    const kid = decoded && typeof decoded === 'object' && decoded.header && typeof decoded.header === 'object'
+      ? (decoded.header as { kid?: unknown }).kid
+      : undefined;
+    const payload = jwt.verify(hint, verificationKey(typeof kid === 'string' ? kid : undefined), {
       algorithms: ['RS256'],
       issuer: config('oidc.issuer'),
       ignoreExpiration: true,
@@ -243,17 +328,19 @@ export function discoveryDocument() {
     token_endpoint: `${issuer}/token`,
     userinfo_endpoint: `${issuer}/userinfo`,
     jwks_uri: `${issuer}/jwks`,
+    introspection_endpoint: `${issuer}/introspect`,
     revocation_endpoint: `${issuer}/revoke`,
     end_session_endpoint: `${issuer}/logout`,
     response_types_supported: ['code'],
-    grant_types_supported: ['authorization_code', 'refresh_token'],
+    grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials'],
     subject_types_supported: ['public'],
     id_token_signing_alg_values_supported: ['RS256'],
     scopes_supported: config('oidc.scopes'),
     token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
     code_challenge_methods_supported: ['S256'],
-    prompt_values_supported: ['none', 'consent'],
-    claims_supported: ['sub', 'name', 'account_type', 'email', 'email_verified', 'phone_number', 'auth_time', 'nonce'],
+    prompt_values_supported: ['none', 'login', 'consent'],
+    claims_supported: ['sub', 'name', 'account_type', 'email', 'email_verified', 'phone_number', 'auth_time', 'nonce', 'at_hash'],
+    introspection_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
     authorization_response_iss_parameter_supported: true,
     request_parameter_supported: false,
   };

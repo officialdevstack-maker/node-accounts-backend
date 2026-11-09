@@ -8,8 +8,8 @@ import { User } from '../models/User.js';
 import { UserPreference } from '../models/UserPreference.js';
 import type { DeleteAccountRequest } from '../requests/DeleteAccountRequest.js';
 import { removeFile } from './AvatarController.js';
-
-const COOKIE_NAME = 'auth_token';
+import { AUTH_COOKIE_NAME, authCookieOptions } from '../lib/auth/cookie.js';
+import { notifyBackchannelLogout } from '../lib/oidc/backchannel-logout.js';
 
 class PrivacyController extends Controller {
   async export(req: HttpRequest) {
@@ -44,6 +44,7 @@ class PrivacyController extends Controller {
 
     const avatar = user.avatar;
 
+    await notifyBackchannelLogout(user.id);
     await DB.transaction(async () => {
       await DB.table('password_resets').where('email', user.email).delete();
       await DB.table('notifications').where('notifiable_id', String(user.id)).delete();
@@ -51,7 +52,7 @@ class PrivacyController extends Controller {
     });
 
     await removeFile(avatar);
-    res.clearCookie(COOKIE_NAME);
+    res.clearCookie(AUTH_COOKIE_NAME, authCookieOptions);
 
     return this.ok(undefined, 'Your account has been deleted.');
   }

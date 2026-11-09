@@ -26,5 +26,7 @@ export const authConfig = {
     rememberDays: env.number('TOKEN_REMEMBER_DAYS', 30),
   },
 
+  cookieDomain: env.string('AUTH_COOKIE_DOMAIN') || undefined,
+
   passwordResetTtlMinutes: env.number('PASSWORD_RESET_TTL_MINUTES', 60),
 };

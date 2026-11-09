@@ -10,8 +10,9 @@ import { AccessToken } from "../../models/AccessToken.js";
 import { Activity, type ActivityContext } from "../../models/Activity.js";
 import { describeDevice } from "./device.js";
 import { notifyOnLogin } from "./alerts.js";
+import { AUTH_COOKIE_NAME, authCookieOptions } from "./cookie.js";
+import { notifyBackchannelLogout } from "../oidc/backchannel-logout.js";
 
-const COOKIE_NAME = "auth_token";
 const SHORT_MS = config("auth.tokens.shortHours") * 60 * 60 * 1000;
 const REMEMBER_MS = config("auth.tokens.rememberDays") * 24 * 60 * 60 * 1000;
 
@@ -39,7 +40,7 @@ export class Guard {
   private extractToken(): string | null {
     const header = this.req.headers.authorization;
     if (header?.startsWith("Bearer ")) return header.slice(7).trim() || null;
-    return this.req.cookies?.[COOKIE_NAME] ?? null;
+    return this.req.cookies?.[AUTH_COOKIE_NAME] ?? null;
   }
 
   /** Creates a token row and returns the plain token (shown once, never stored). */
@@ -74,7 +75,8 @@ export class Guard {
     this._issuedToken = token;
 
     // Optional: also set a cookie for browser clients. Remove if you only use Bearer tokens.
-    this.res.cookie(COOKIE_NAME, token, {
+    this.res.cookie(AUTH_COOKIE_NAME, token, {
+      ...authCookieOptions,
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
@@ -137,10 +139,11 @@ export class Guard {
     const plain = this.extractToken();
     if (plain) await AccessToken.destroyByHash(sha256(plain));
     if (user) {
+      await notifyBackchannelLogout(user.id);
       await Activity.record(user.id, "logout", { ip: this.req.ip, userAgent: this.req.get("user-agent") });
     }
 
-    this.res.clearCookie(COOKIE_NAME);
+    this.res.clearCookie(AUTH_COOKIE_NAME, authCookieOptions);
     this._user = null;
     this._issuedToken = null;
     this._resolved = true;
@@ -150,11 +153,12 @@ export class Guard {
   async logoutAll(): Promise<void> {
     const id = await this.id();
     if (id) {
+      await notifyBackchannelLogout(id);
       await AccessToken.destroyByUser(id);
       await Activity.record(id, "logout_all", { ip: this.req.ip, userAgent: this.req.get("user-agent") });
     }
 
-    this.res.clearCookie(COOKIE_NAME);
+    this.res.clearCookie(AUTH_COOKIE_NAME, authCookieOptions);
     this._user = null;
     this._resolved = true;
   }

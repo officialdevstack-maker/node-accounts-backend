@@ -12,6 +12,8 @@ export interface AuthorizeParams {
   nonce: string | undefined;
   codeChallenge: string;
   prompt: string[];
+  maxAge?: number;
+  loginHint?: string;
 }
 
 /** Validates the /authorize query. Order matters: client + redirect_uri first (errors are shown to the user), the rest are redirected to the app. */
@@ -50,6 +52,28 @@ export async function parseAuthorizeRequest(query: Record<string, unknown>): Pro
     throw fail('invalid_request', 'PKCE is required: send code_challenge (S256) and code_challenge_method=S256.');
   }
 
+  const prompt = (str(query.prompt) ?? '').split(/\s+/).filter(Boolean);
+  const validPrompts = new Set(['none', 'login', 'consent']);
+  if (prompt.some((value) => !validPrompts.has(value)) || (prompt.includes('none') && prompt.length > 1)) {
+    throw fail('invalid_request', 'prompt must contain supported values; none cannot be combined with another value.');
+  }
+
+  const hasMaxAge = query.max_age !== undefined;
+  const maxAgeValue = hasMaxAge ? str(query.max_age) : undefined;
+  const maxAge = maxAgeValue === undefined ? undefined : Number(maxAgeValue);
+  if (
+    hasMaxAge &&
+    (maxAgeValue === undefined ||
+      !/^\d+$/.test(maxAgeValue) ||
+      maxAge === undefined ||
+      !Number.isSafeInteger(maxAge) ||
+      maxAge < 0)
+  ) {
+    throw fail('invalid_request', 'max_age must be a non-negative integer.');
+  }
+  const loginHint = str(query.login_hint);
+  if (loginHint && loginHint.length > 255) throw fail('invalid_request', 'login_hint is too long.');
+
   return {
     client,
     redirectUri,
@@ -57,13 +81,15 @@ export async function parseAuthorizeRequest(query: Record<string, unknown>): Pro
     state,
     nonce: str(query.nonce),
     codeChallenge,
-    prompt: (str(query.prompt) ?? '').split(/\s+/).filter(Boolean),
+    prompt,
+    ...(maxAge !== undefined ? { maxAge } : {}),
+    ...(loginHint ? { loginHint } : {}),
   };
 }
 
 const KEEP = [
   'client_id', 'redirect_uri', 'response_type', 'scope', 'state', 'nonce',
-  'code_challenge', 'code_challenge_method', 'prompt',
+  'code_challenge', 'code_challenge_method', 'prompt', 'max_age', 'login_hint',
 ] as const;
 
 export function signRequest(query: Record<string, unknown>): string {

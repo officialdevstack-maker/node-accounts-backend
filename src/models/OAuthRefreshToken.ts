@@ -6,8 +6,18 @@ const TABLE = 'oauth_refresh_tokens';
 
 export type RotateResult =
   | { status: 'invalid' }
+  | { status: 'duplicate' }
   | { status: 'reused'; grantId: number }
   | { status: 'ok'; token: string; grantId: number; scopes: string[]; authTime: Date };
+
+const DUPLICATE_WINDOW_MS = 10_000;
+
+function replayStatus(usedAt: unknown, grantId: number): RotateResult {
+  const timestamp = new Date(usedAt as string | number | Date).getTime();
+  return Number.isFinite(timestamp) && Date.now() - timestamp >= 0 && Date.now() - timestamp <= DUPLICATE_WINDOW_MS
+    ? { status: 'duplicate' }
+    : { status: 'reused', grantId };
+}
 
 async function issue(input: { grantId: number; scopes: string[]; authTime: Date }, ttlDays: number): Promise<string> {
   const token = randomToken(40);
@@ -30,11 +40,14 @@ async function rotate(token: string): Promise<RotateResult> {
   if (!row) return { status: 'invalid' };
 
   const grantId = Number(row.grant_id);
-  if (row.used_at) return { status: 'reused', grantId };
+  if (row.used_at) return replayStatus(row.used_at, grantId);
   if (new Date(row.expires_at).getTime() <= Date.now()) return { status: 'invalid' };
 
   const claimed = await DB.table(TABLE).where('id', row.id).whereNull('used_at').update({ used_at: new Date() });
-  if (claimed === 0) return { status: 'reused', grantId };
+  if (claimed === 0) {
+    const updated = await DB.table(TABLE).where('id', row.id).first();
+    return updated?.used_at ? replayStatus(updated.used_at, grantId) : { status: 'invalid' };
+  }
 
   const scopes = parseJson<string[]>(row.scopes);
   const authTime = new Date(row.auth_time);

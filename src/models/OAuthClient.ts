@@ -7,7 +7,8 @@ export class OAuthClient extends Model {
   static table = 'oauth_clients';
   static fillable = [
     'clientId', 'secretHash', 'name', 'description', 'logoUri', 'type',
-    'redirectUris', 'postLogoutRedirectUris', 'allowedScopes', 'isActive',
+    'redirectUris', 'postLogoutRedirectUris', 'allowedScopes', 'backchannelLogoutUri',
+    'clientCredentialsEnabled', 'isActive',
   ];
   static hidden = ['secretHash'];
   static casts: Record<string, Cast> = {
@@ -15,6 +16,7 @@ export class OAuthClient extends Model {
     redirectUris: 'json',
     postLogoutRedirectUris: 'json',
     allowedScopes: 'json',
+    clientCredentialsEnabled: 'boolean',
     isActive: 'boolean',
     createdAt: 'date',
     updatedAt: 'date',
@@ -30,6 +32,8 @@ export class OAuthClient extends Model {
   declare redirectUris: string[];
   declare postLogoutRedirectUris: string[];
   declare allowedScopes: string[];
+  declare backchannelLogoutUri: string | null;
+  declare clientCredentialsEnabled: boolean;
   declare isActive: boolean;
   declare createdAt: Date;
   declare updatedAt: Date;
