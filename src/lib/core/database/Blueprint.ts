@@ -372,6 +372,10 @@ export class Blueprint {
     return schemaGrammarFor(config('database.default', 'mysql')).createTable(this.table, this);
   }
 
+  createStatements(): string[] {
+    return schemaGrammarFor(config('database.default', 'mysql')).createStatements(this.table, this);
+  }
+
   /** One statement per change, for schema.table(). */
   alterSql(): string[] {
     return schemaGrammarFor(config('database.default', 'mysql')).alterTable(this.table, this);

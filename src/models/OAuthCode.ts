@@ -63,7 +63,7 @@ async function consume(code: string): Promise<CodeResult> {
 
 async function destroyForUser(userId: number): Promise<void> {
   await DB.delete(
-    'DELETE c FROM oauth_codes AS c INNER JOIN oauth_grants AS g ON g.id = c.grant_id WHERE g.user_id = ?',
+    'DELETE FROM oauth_codes WHERE grant_id IN (SELECT id FROM oauth_grants WHERE user_id = ?)',
     [userId],
   );
 }

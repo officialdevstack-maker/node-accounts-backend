@@ -64,6 +64,7 @@ export class AccessToken extends Model {
     return AccessToken.query()
       .where('user_id', userId)
       .where((q) => q.whereNull('expires_at').orWhere('expires_at', '>', new Date()))
+      .orderByRaw('(last_used_at IS NULL) asc')
       .orderByDesc('last_used_at')
       .orderByDesc('id')
       .get();

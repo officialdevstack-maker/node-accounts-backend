@@ -1,6 +1,6 @@
-# Query pack (Laravel-style MySQL query builder)
+# Query pack (Laravel-style multi-dialect query builder)
 
-Needs the `database/` pack (it uses the same MySQL connection) and `cli/`.
+Needs the `database/` pack (it uses the selected MySQL, PostgreSQL, or SQLite connection) and `cli/`.
 
 ```ts
 import { DB } from '../lib/core/query/index.js';
@@ -30,3 +30,5 @@ await DB.transaction(async (trx) => {
 DB.table('users').where('id', 1).toSql();
 DB.table('users').where('id', 1).toRawSql();
 ```
+
+Raw SQL values use `?` bindings across all drivers. PostgreSQL converts these to positional bindings; use `??` in raw SQL when a literal `?` operator is needed.

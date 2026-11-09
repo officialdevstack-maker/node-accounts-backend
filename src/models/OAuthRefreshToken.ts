@@ -69,7 +69,7 @@ async function destroyByToken(token: string, clientRef: number): Promise<void> {
 
 async function destroyForUser(userId: number): Promise<void> {
   await DB.delete(
-    'DELETE rt FROM oauth_refresh_tokens AS rt INNER JOIN oauth_grants AS g ON g.id = rt.grant_id WHERE g.user_id = ?',
+    'DELETE FROM oauth_refresh_tokens WHERE grant_id IN (SELECT id FROM oauth_grants WHERE user_id = ?)',
     [userId],
   );
 }

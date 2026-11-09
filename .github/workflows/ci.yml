@@ -47,3 +47,52 @@ jobs:
       - run: node dist/lib/core/artisan.js list
       - run: node dist/lib/core/artisan.js model:check
       - run: node dist/lib/core/artisan.js query:check
+
+  test-postgres:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      APP_URL: http://localhost:3000
+      FRONTEND_URL: http://localhost:5173
+      OIDC_ISSUER: http://localhost:3000/api/oidc
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_NAME: node_accounts_test
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_SSL: "false"
+      TEST_DB_CONNECTION: pgsql
+      TEST_DB_HOST: 127.0.0.1
+      TEST_DB_PORT: "5432"
+      TEST_DB_NAME: node_accounts_test
+      TEST_DB_USERNAME: postgres
+      TEST_DB_PASSWORD: postgres
+      TEST_DB_SSL: "false"
+      JWT_SECRET: test-only-jwt-secret
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: node_accounts_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d node_accounts_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+      - run: npm run build
+      - run: node dist/lib/core/artisan.js model:check
+      - run: node dist/lib/core/artisan.js query:check

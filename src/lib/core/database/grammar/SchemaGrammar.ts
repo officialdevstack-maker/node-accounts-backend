@@ -12,6 +12,10 @@ export abstract class SchemaGrammar {
     return '';
   }
 
+  createStatements(table: string, blueprint: Blueprint): string[] {
+    return [this.createTable(table, blueprint)];
+  }
+
   createTable(table: string, blueprint: Blueprint): string {
     const primary = blueprint.columns.filter((column) => column.isPrimary).map((column) => quoteId(column.name));
     const lines = [

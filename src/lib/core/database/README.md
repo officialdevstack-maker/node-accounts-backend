@@ -1,12 +1,12 @@
-# Database pack (Laravel-style migrations and seeders on MySQL)
+# Database pack (Laravel-style migrations and seeders)
 
-Needs the `config/` and `cli/` packs. Registers its commands with artisan by itself (`database/pack.ts`).
+Supports MySQL, PostgreSQL, and SQLite. Needs the `config/` and `cli/` packs. Registers its commands with artisan by itself (`database/pack.ts`).
 
 ## Install
 ```bash
-npm i mysql2
+npm i mysql2 pg
 ```
-Configure MySQL in `.env` (`DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD`). Then:
+Set `DB_CONNECTION` to `mysql`, `pgsql`, or `sqlite`. For MySQL and PostgreSQL, configure `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, and `DB_PASSWORD`; set `DB_SSL=true` when the provider requires TLS. SQLite uses `DB_SQLITE_PATH`. Then:
 ```bash
 npm run artisan -- db:verify    # can we connect?
 npm run artisan -- migrate      # creates the notifications table (and anything you add)
@@ -62,14 +62,13 @@ export default class extends Migration {
 
 Columns are `NOT NULL` unless you add `.nullable()`. Table-level: `t.index([...])`, `t.unique([...])`.
 Schema: `create` `table` (add columns to an existing table) `drop` `dropIfExists` `rename` `dropColumn` `renameColumn`
-`dropIndex` `hasTable` `hasColumn` and `raw(sql)`.
-`renameColumn` requires MySQL 8+ or MariaDB 10.5+.
+`dropIndex` `hasTable` `hasColumn` and `raw(sql)`. Schema operations use the selected database dialect.
 
 Files run oldest first, ordered by the timestamp in the file name. Applied migrations are recorded in the `migrations` table
 (`DB_MIGRATIONS_TABLE`). Never edit a migration that already ran in production: add a new one.
 
 Notes:
-- MySQL commits DDL immediately, so a migration that fails half way is not undone. Keep each migration small.
+- MySQL and PostgreSQL commit DDL immediately, so a migration that fails part way is not undone. Keep each migration small.
 - In production `migrate*` asks for confirmation; with no terminal (CI) it refuses unless you pass `--force`.
 - `rollback` refuses, before changing anything, if a recorded migration's file has been deleted.
 

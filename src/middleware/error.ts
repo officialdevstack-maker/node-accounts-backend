@@ -5,9 +5,9 @@ import HttpError from "../lib/error.js";
 // import { HttpError } from "../errors/HttpError.js";
 
 const isProd = process.env.NODE_ENV === "production";
-type MysqlError = Error & { code?: string; sqlMessage?: string };
-const isDuplicate = (error: unknown): error is MysqlError =>
-  error instanceof Error && (error as MysqlError).code === "ER_DUP_ENTRY";
+type DatabaseError = Error & { code?: string; sqlMessage?: string; detail?: string };
+const isDuplicate = (error: unknown): error is DatabaseError =>
+  error instanceof Error && ["ER_DUP_ENTRY", "23505"].includes((error as DatabaseError).code ?? "");
 
 /**
  * Catch-all for any route that didn't match.
@@ -40,7 +40,10 @@ export function errorHandler(
   } else if (isDuplicate(err)) {
     status = 422;
     message = "Validation failed.";
-    const key = err.sqlMessage?.match(/for key '(.+?)'/)?.[1]?.split(".").pop() ?? "field";
+    const key =
+      err.sqlMessage?.match(/for key '(.+?)'/)?.[1]?.split(".").pop() ??
+      err.detail?.match(/Key \((.+?)\)=/)?.[1]?.split(",")[0] ??
+      "field";
     errors = { [key]: `${key} already in use.` };
   } else if (err instanceof jwt.JsonWebTokenError) {
     status = 401;

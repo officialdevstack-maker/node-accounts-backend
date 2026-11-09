@@ -16,8 +16,16 @@ export class PostgresGrammar extends Grammar {
       case 'year':
         return `extract(year from ${column})`;
       case 'time':
-        return `date_trunc('second', ${column})`;
+        return `(${column})::time`;
     }
+  }
+
+  protected override operator(op: string): string {
+    return op;
+  }
+
+  protected override ignoreSuffix(): string {
+    return ' on conflict do nothing';
   }
 
   protected random(): string {
