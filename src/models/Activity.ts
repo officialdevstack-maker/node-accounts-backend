@@ -15,7 +15,9 @@ export type ActivityEvent =
   | 'profile_updated'
   | 'avatar_updated'
   | 'avatar_removed'
-  | 'data_exported';
+  | 'data_exported'
+  | 'app_connected'
+  | 'app_revoked';
 
 export interface ActivityContext {
   ip?: string | undefined;

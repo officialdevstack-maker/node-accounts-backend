@@ -5,8 +5,10 @@ import { authenticationController } from "../controllers/AuthenticationControlle
 import { activityController } from "../controllers/ActivityController.js";
 import { avatarController } from "../controllers/AvatarController.js";
 import { changePasswordController } from "../controllers/ChangePasswordController.js";
+import { connectedAppController } from "../controllers/ConnectedAppController.js";
 import { deviceController } from "../controllers/DeviceController.js";
 import { forgotPasswordController } from "../controllers/ForgotPasswordController.js";
+import { oidcController } from "../controllers/OidcController.js";
 import { preferenceController } from "../controllers/PreferenceController.js";
 import { privacyController } from "../controllers/PrivacyController.js";
 import { registerUserController } from "../controllers/RegisterUserController.js";
@@ -32,6 +34,8 @@ Route.group({ prefix: "/auth", as: "auth." }, () => {
     Route.get("/devices", [deviceController, "index"]).name("devices.index");
     Route.post("/devices/logout-others", [deviceController, "destroyOthers"]).name("devices.logout-others");
     Route.delete("/devices/{id}", [deviceController, "destroy"]).whereNumber("id").name("devices.destroy");
+    Route.get("/connected-apps", [connectedAppController, "index"]).name("connected-apps.index");
+    Route.delete("/connected-apps/{id}", [connectedAppController, "destroy"]).whereNumber("id").name("connected-apps.destroy");
     Route.get("/activity", [activityController, "index"]).name("activity.index");
     Route.get("/profile", [authenticationController, "show"]).name("profile");
     Route.put("/avatar", [avatarController, "update"])
@@ -48,6 +52,21 @@ Route.group({ prefix: "/auth", as: "auth." }, () => {
   });
 
   Route.post("/register", [registerUserController, "create"]).request(RegisterUserRequest).middleware("throttle:auth").name("register");
+});
+
+Route.group({ prefix: "/oidc", as: "oidc." }, () => {
+  Route.get("/.well-known/openid-configuration", [oidcController, "discovery"]).name("discovery");
+  Route.get("/jwks", [oidcController, "jwks"]).name("jwks");
+  Route.get("/authorize", [oidcController, "authorize"]).middleware("throttle:60,1").name("authorize");
+  Route.post("/token", [oidcController, "token"]).middleware("throttle:60,1").name("token");
+  Route.match(["get", "post"], "/userinfo", [oidcController, "userinfo"]).name("userinfo");
+  Route.post("/revoke", [oidcController, "revoke"]).middleware("throttle:60,1").name("revoke");
+  Route.get("/logout", [oidcController, "logout"]).name("logout");
+
+  Route.middleware("auth").group(() => {
+    Route.get("/consent", [oidcController, "consentShow"]).name("consent.show");
+    Route.post("/consent", [oidcController, "consentStore"]).name("consent.store");
+  });
 });
 
 export const apiV1Route = Route.router();

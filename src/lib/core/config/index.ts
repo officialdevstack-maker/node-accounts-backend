@@ -13,6 +13,7 @@ import { authConfig } from './auth.js';
 import { databaseConfig } from './database.js';
 import { mailConfig } from './mail.js';
 import { notificationsConfig } from './notifications.js';
+import { oidcConfig } from './oidc.js';
 import { queueConfig } from './queue.js';
 import { ratelimitConfig } from './ratelimit.js';
 import { servicesConfig } from './services.js';
@@ -28,6 +29,7 @@ const repository = {
   database: databaseConfig,
   mail: mailConfig,
   notifications: notificationsConfig,
+  oidc: oidcConfig,
   queue: queueConfig,
   ratelimit: ratelimitConfig,
   services: servicesConfig,
@@ -106,4 +108,4 @@ export function config<P extends ConfigPath>(
   return Config.get(path, fallback);
 }
 
-export { appConfig, authConfig, databaseConfig, mailConfig, notificationsConfig, queueConfig, ratelimitConfig, servicesConfig, storageConfig };
+export { appConfig, authConfig, databaseConfig, mailConfig, notificationsConfig, oidcConfig, queueConfig, ratelimitConfig, servicesConfig, storageConfig };
