@@ -3,6 +3,7 @@ import express from "express";
 import { Route } from "../lib/core/routing/index.js";
 import { authenticationController } from "../controllers/AuthenticationController.js";
 import { adminStatsController } from "../controllers/AdminStatsController.js";
+import { adminSettingController } from "../controllers/AdminSettingController.js";
 import { adminUserController } from "../controllers/AdminUserController.js";
 import { activityController } from "../controllers/ActivityController.js";
 import { avatarController } from "../controllers/AvatarController.js";
@@ -90,6 +91,8 @@ Route.group({ prefix: "/internal", as: "internal." }, () => {
     Route.post("/admin/users/{id}/unsuspend", [adminUserController, "unsuspend"]).whereNumber("id").name("admin.users.unsuspend");
     Route.post("/admin/users/{id}/revoke-sessions", [adminUserController, "revokeSessions"]).whereNumber("id").name("admin.users.revoke-sessions");
     Route.post("/admin/users/{id}/verify-email", [adminUserController, "verifyEmail"]).whereNumber("id").name("admin.users.verify-email");
+    Route.get("/admin/settings", [adminSettingController, "index"]).name("admin.settings.index");
+    Route.post("/admin/settings", [adminSettingController, "update"]).name("admin.settings.update");
   });
 });
 

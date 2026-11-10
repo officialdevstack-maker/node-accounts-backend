@@ -12,6 +12,16 @@ Production also requires `APP_KEY` or `JWT_SECRET`, `OIDC_PRIVATE_KEY`, `FRONTEN
 
 Admin-site routes under `/api/internal/admin/*` and `/api/internal/stats/*` require the `x-internal-secret` header; they do not use a user session or service token. Call them only from the admin site's server over HTTPS, and never expose the shared key to a browser. Configure a long, random `INTERNAL_SHARED_SECRET` and restrict access at the proxy or network boundary as well. The separate `/api/internal/users/{id}` endpoint continues to use the internal-network and `users:read` service-token checks.
 
+The admin settings page reads and updates the whitelisted settings through
+`/api/internal/admin/settings`. Apply the pending backend migration before using it:
+
+```sh
+npm run artisan -- migrate
+```
+
+Disabling `registration_enabled` rejects new registrations. `maintenance_mode` is stored
+as an operational flag and does not by itself block requests.
+
 ## Checks
 
 ```sh

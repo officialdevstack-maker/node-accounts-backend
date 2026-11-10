@@ -1,11 +1,13 @@
 import Auth from "../lib/auth/index.js"
 import { sendVerificationCode } from "../lib/auth/verification.js"
+import { getSetting } from "../lib/admin/settings.js"
 import { Controller } from "../lib/core/controller/index.js"
 import { User } from "../models/User.js"
 import type { RegisterUserRequest } from "../requests/RegisterUserRequest.js"
 
 class RegisterUserController extends Controller {
     async create(req: RegisterUserRequest) {
+        this.abortIf((await getSetting('registration_enabled')) !== true, 403, 'Registration is currently closed.')
         const data = req.validated<{ fullname: string; email: string; phone: string; password: string }>()
 
         const created = await User.create({
