@@ -1,7 +1,10 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import HttpError from '../lib/error.js';
 import { config } from '../lib/core/config/index.js';
+
+const fingerprint = (value: string | undefined): string =>
+  value ? `${createHash('sha256').update(value).digest('hex').slice(0, 8)} (len ${value.length})` : 'missing';
 
 function matchesSecret(supplied: string | undefined, expected: string): boolean {
   if (!supplied) return false;
@@ -22,7 +25,12 @@ export function internalNetwork(req: Request, _res: Response, next: NextFunction
 
 export function internalKey(req: Request, _res: Response, next: NextFunction): void {
   const expected = config('services.internal.sharedSecret');
-  if (!expected || !matchesSecret(req.get('x-internal-secret'), expected)) {
+  const supplied = req.get('x-internal-secret');
+  if (!expected || !matchesSecret(supplied, expected)) {
+    // Temporary diagnostics; remove once the configured secrets match.
+    console.warn(
+      `[internal-key] rejected: expected ${fingerprint(expected)}, received ${fingerprint(supplied)}`,
+    );
     return next(HttpError.forbidden('Invalid internal key.'));
   }
   next();
