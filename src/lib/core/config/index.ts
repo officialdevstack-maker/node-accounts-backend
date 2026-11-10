@@ -10,6 +10,7 @@ import 'dotenv/config';
 
 import { appConfig } from './app.js';
 import { authConfig } from './auth.js';
+import { cacheConfig } from './cache.js';
 import { databaseConfig } from './database.js';
 import { mailConfig } from './mail.js';
 import { notificationsConfig } from './notifications.js';
@@ -26,6 +27,7 @@ export type { MailerName } from './mail.js';
 const repository = {
   app: appConfig,
   auth: authConfig,
+  cache: cacheConfig,
   database: databaseConfig,
   mail: mailConfig,
   notifications: notificationsConfig,
@@ -108,4 +110,4 @@ export function config<P extends ConfigPath>(
   return Config.get(path, fallback);
 }
 
-export { appConfig, authConfig, databaseConfig, mailConfig, notificationsConfig, oidcConfig, queueConfig, ratelimitConfig, servicesConfig, storageConfig };
+export { appConfig, authConfig, cacheConfig, databaseConfig, mailConfig, notificationsConfig, oidcConfig, queueConfig, ratelimitConfig, servicesConfig, storageConfig };

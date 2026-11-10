@@ -1,5 +1,6 @@
 import { Application, HttpServiceProvider } from '../lib/core/boot/index.js';
 import { AuthServiceProvider } from '../providers/AuthServiceProvider.js';
+import { CacheServiceProvider } from '../providers/CacheServiceProvider.js';
 import { DatabaseServiceProvider } from '../providers/DatabaseServiceProvider.js';
 import { ErrorServiceProvider } from '../providers/ErrorServiceProvider.js';
 import { MailQueueServiceProvider } from '../providers/MailQueueServiceProvider.js';
@@ -11,6 +12,7 @@ export const app = Application.create(
   AuthServiceProvider,
   DatabaseServiceProvider,
   RateLimitServiceProvider,
+  CacheServiceProvider,
   MailQueueServiceProvider,
   RouteServiceProvider,
   ErrorServiceProvider,
