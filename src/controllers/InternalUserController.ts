@@ -16,6 +16,8 @@ class InternalUserController extends Controller {
       phone: user.phone,
       isVerified: user.isVerified,
       accountType: user.accountType,
+      suspendedAt: user.suspendedAt,
+      isAdmin: user.isAdmin,
     });
   }
 }

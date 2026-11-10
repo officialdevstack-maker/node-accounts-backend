@@ -19,3 +19,11 @@ export function internalNetwork(req: Request, _res: Response, next: NextFunction
   if (!ipAllowed && !secretAllowed) return next(HttpError.forbidden('This endpoint is restricted to internal services.'));
   next();
 }
+
+export function internalKey(req: Request, _res: Response, next: NextFunction): void {
+  const expected = config('services.internal.sharedSecret');
+  if (!expected || !matchesSecret(req.get('x-internal-secret'), expected)) {
+    return next(HttpError.forbidden('Invalid internal key.'));
+  }
+  next();
+}

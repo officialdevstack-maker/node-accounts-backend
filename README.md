@@ -10,7 +10,7 @@ Render's filesystem is ephemeral, so use an external MySQL or PostgreSQL databas
 
 Production also requires `APP_KEY` or `JWT_SECRET`, `OIDC_PRIVATE_KEY`, `FRONTEND_URL`, and a non-empty `CORS_ORIGINS` list without `*`. Configure S3-compatible avatar storage with `AVATAR_STORAGE_DRIVER=s3` and the `S3_*` values. Set `REDIS_URL` to enable durable mail jobs and shared rate-limit storage.
 
-Protect `/api/internal/*` with both the `internal` middleware and the appropriate `service:<scope>` middleware. Configure `INTERNAL_ALLOWED_IPS` and/or `INTERNAL_SHARED_SECRET`, and restrict the route at the proxy or network boundary as well.
+Admin-site routes under `/api/internal/admin/*` and `/api/internal/stats/*` require the `x-internal-secret` header; they do not use a user session or service token. Call them only from the admin site's server over HTTPS, and never expose the shared key to a browser. Configure a long, random `INTERNAL_SHARED_SECRET` and restrict access at the proxy or network boundary as well. The separate `/api/internal/users/{id}` endpoint continues to use the internal-network and `users:read` service-token checks.
 
 ## Checks
 

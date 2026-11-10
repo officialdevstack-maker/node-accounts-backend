@@ -7,6 +7,8 @@ import { OAuthCode } from '../models/OAuthCode.js';
 import { OAuthRefreshToken } from '../models/OAuthRefreshToken.js';
 import { User } from '../models/User.js';
 
+const escapeLike = (value: string): string => value.replace(/[!%_]/g, '!$&');
+
 class AdminUserController extends Controller {
   async index(req: HttpRequest) {
     const { page, perPage } = this.pageParams(req);
@@ -15,7 +17,8 @@ class AdminUserController extends Controller {
 
     if (search) {
       query.where((g) =>
-        g.where('email', 'like', `%${search}%`).orWhere('fullname', 'like', `%${search}%`),
+        g.whereRaw("email like ? escape '!'", [`%${escapeLike(search)}%`])
+          .orWhereRaw("fullname like ? escape '!'", [`%${escapeLike(search)}%`]),
       );
     }
     if (req.query('status') === 'suspended') query.whereNotNull('suspended_at');
@@ -33,9 +36,9 @@ class AdminUserController extends Controller {
   }
 
   async suspend(req: HttpRequest, res: Response) {
-    const admin = this.user<User>(req);
+    const admin = this.actor(req);
     const user = await this.target(req);
-    this.abortIf(user.id === admin.id, 422, 'You cannot suspend yourself.');
+    this.abortIf(admin.id !== null && user.id === admin.id, 422, 'You cannot suspend yourself.');
     this.abortIf(user.isAdmin, 422, 'Admins cannot be suspended.');
 
     if (!user.suspendedAt) {
@@ -49,7 +52,7 @@ class AdminUserController extends Controller {
   }
 
   async unsuspend(req: HttpRequest) {
-    const admin = this.user<User>(req);
+    const admin = this.actor(req);
     const user = await this.target(req);
 
     if (user.suspendedAt) {
@@ -61,7 +64,7 @@ class AdminUserController extends Controller {
   }
 
   async revokeSessions(req: HttpRequest, res: Response) {
-    const admin = this.user<User>(req);
+    const admin = this.actor(req);
     const user = await this.target(req);
 
     await this.revokeAccess(user.id);
@@ -71,7 +74,7 @@ class AdminUserController extends Controller {
   }
 
   async verifyEmail(req: HttpRequest) {
-    const admin = this.user<User>(req);
+    const admin = this.actor(req);
     const user = await this.target(req);
 
     if (!user.isVerified) {
@@ -87,13 +90,20 @@ class AdminUserController extends Controller {
     return User.findOrFail(id);
   }
 
+  private actor(req: HttpRequest): { id: number | null; email: string } {
+    const user = req.user as User | undefined;
+    return user
+      ? { id: user.id, email: user.email }
+      : { id: null, email: req.header('x-admin-email') ?? 'internal-admin' };
+  }
+
   private async revokeAccess(userId: number): Promise<void> {
     await AccessToken.destroyByUser(userId);
     await Promise.all([OAuthRefreshToken.destroyForUser(userId), OAuthCode.destroyForUser(userId)]);
   }
 
   /** Recorded on the target user's activity feed, with the acting admin in meta. */
-  private audit(req: HttpRequest, admin: User, target: User, event: ActivityEvent) {
+  private audit(req: HttpRequest, admin: { id: number | null; email: string }, target: User, event: ActivityEvent) {
     return Activity.record(
       target.id,
       event,
