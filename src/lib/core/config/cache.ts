@@ -16,4 +16,6 @@ export const cacheConfig = {
   prefix: env.string('CACHE_PREFIX', 'cache'),
   /** Memory store only: evicts the oldest entries beyond this */
   memoryMaxEntries: env.number('CACHE_MEMORY_MAX_ENTRIES', 5000),
+  /** How long a validated access token is trusted without re-checking the DB (seconds) */
+  authTokenTtl: env.number('CACHE_AUTH_TTL', 30),
 };

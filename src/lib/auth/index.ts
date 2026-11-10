@@ -111,7 +111,7 @@ export class Guard {
     const plain = this.extractToken();
     if (!plain) return null;
 
-    const record = await AccessToken.findValid(sha256(plain));
+    const record = await AccessToken.resolve(sha256(plain));
     if (!record) return null;
 
     this._tokenId = record.id;
