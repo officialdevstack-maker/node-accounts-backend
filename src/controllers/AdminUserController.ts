@@ -6,6 +6,8 @@ import { Activity, type ActivityEvent } from '../models/Activity.js';
 import { OAuthCode } from '../models/OAuthCode.js';
 import { OAuthRefreshToken } from '../models/OAuthRefreshToken.js';
 import { User } from '../models/User.js';
+import { Mail, WelcomeMail } from '../lib/core/mail/index.js';
+import type { AdminCreateUserRequest } from '../requests/AdminCreateUserRequest.js';
 
 const escapeLike = (value: string): string => value.replace(/[!%_]/g, '!$&');
 
@@ -33,6 +35,36 @@ class AdminUserController extends Controller {
       Activity.forUser(user.id, 1, 20),
     ]);
     return this.ok({ user, devices: devices.map((d) => d.toDevice(null)), activity: activity.data });
+  }
+
+  async store(req: AdminCreateUserRequest) {
+    const admin = this.actor(req);
+    const data = req.validated<{
+      fullname: string;
+      email: string;
+      phone?: string;
+      password: string;
+      account_type: 'user' | 'business' | 'developer';
+    }>();
+
+    const user = await User.create({
+      fullname: data.fullname,
+      email: data.email,
+      phone: data.phone || null,
+      password: data.password,
+      accountType: data.account_type,
+    });
+
+    if (req.boolean('is_verified')) {
+      user.isVerified = true;
+      await user.save();
+    }
+    await user.refresh();
+
+    await this.audit(req, admin, user, 'user_created_by_admin');
+    if (req.boolean('send_welcome')) Mail.to(user.email).queue(new WelcomeMail(user));
+
+    return this.created(user, 'User created.');
   }
 
   async suspend(req: HttpRequest, res: Response) {

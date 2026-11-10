@@ -2,6 +2,7 @@ import "../middleware/kernel.js";
 import express from "express";
 import { Route } from "../lib/core/routing/index.js";
 import { authenticationController } from "../controllers/AuthenticationController.js";
+import { adminActivityController } from "../controllers/AdminActivityController.js";
 import { adminStatsController } from "../controllers/AdminStatsController.js";
 import { adminSettingController } from "../controllers/AdminSettingController.js";
 import { adminUserController } from "../controllers/AdminUserController.js";
@@ -24,6 +25,7 @@ import { ForgotPasswordRequest } from "../requests/ForgotPasswordRequest.js";
 import { RegisterUserRequest } from "../requests/RegisterUserRequest.js";
 import { ResetPasswordRequest } from "../requests/ResetPasswordRequest.js";
 import { UpdateProfileRequest } from "../requests/UpdateProfileRequest.js";
+import { AdminCreateUserRequest } from "../requests/AdminCreateUserRequest.js";
 
 Route.group({ prefix: "/auth", as: "auth." }, () => {
   Route.post("/login", [authenticationController, "create"]).middleware("throttle:auth").name("login");
@@ -86,11 +88,13 @@ Route.group({ prefix: "/internal", as: "internal." }, () => {
     Route.get("/stats/active-users-chart", [adminStatsController, "activeChart"]).name("stats.chart");
 
     Route.get("/admin/users", [adminUserController, "index"]).name("admin.users.index");
+    Route.post("/admin/users", [adminUserController, "store"]).request(AdminCreateUserRequest).name("admin.users.store");
     Route.get("/admin/users/{id}", [adminUserController, "show"]).whereNumber("id").name("admin.users.show");
     Route.post("/admin/users/{id}/suspend", [adminUserController, "suspend"]).whereNumber("id").name("admin.users.suspend");
     Route.post("/admin/users/{id}/unsuspend", [adminUserController, "unsuspend"]).whereNumber("id").name("admin.users.unsuspend");
     Route.post("/admin/users/{id}/revoke-sessions", [adminUserController, "revokeSessions"]).whereNumber("id").name("admin.users.revoke-sessions");
     Route.post("/admin/users/{id}/verify-email", [adminUserController, "verifyEmail"]).whereNumber("id").name("admin.users.verify-email");
+    Route.get("/admin/activity", [adminActivityController, "index"]).name("admin.activity.index");
     Route.get("/admin/settings", [adminSettingController, "index"]).name("admin.settings.index");
     Route.post("/admin/settings", [adminSettingController, "update"]).name("admin.settings.update");
   });

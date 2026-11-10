@@ -21,6 +21,7 @@ export type ActivityEvent =
   | 'user_suspended'
   | 'user_unsuspended'
   | 'user_verified_by_admin'
+  | 'user_created_by_admin'
   | 'sessions_revoked_by_admin';
 
 export interface ActivityContext {
@@ -90,5 +91,34 @@ export const Activity = {
       .limit(limit)
       .get();
     return rows.map(hydrate);
+  },
+
+  /** Latest events across all users, with the owning user's name and email. */
+  async recent(limit = 10) {
+    const rows = await DB.table(`${TABLE} as a`)
+      .join('users as u', 'u.id', 'a.user_id')
+      .orderByDesc('a.id')
+      .limit(limit)
+      .select(
+        'a.id as id',
+        'a.event as event',
+        'a.ip_address as ip_address',
+        'a.device_name as device_name',
+        'a.meta as meta',
+        'a.created_at as created_at',
+        'u.id as user_id',
+        'u.fullname as fullname',
+        'u.email as email',
+      )
+      .get();
+
+    return rows.map((row) => ({
+      ...hydrate(row),
+      user: {
+        id: Number(row.user_id),
+        fullname: String(row.fullname),
+        email: String(row.email),
+      },
+    }));
   },
 };
