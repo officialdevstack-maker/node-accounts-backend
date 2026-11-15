@@ -10,11 +10,11 @@ services:
       - key: NODE_ENV
         value: production
       - key: APP_URL
-        sync: false
+        value: https://node-accounts-backend.onrender.com
       - key: FRONTEND_URL
         sync: false
       - key: OIDC_ISSUER
-        sync: false
+        value: https://node-accounts-backend.onrender.com/api/oidc
       - key: CORS_ORIGINS
         sync: false
       - key: OIDC_PRIVATE_KEY

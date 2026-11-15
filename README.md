@@ -4,7 +4,7 @@ The API listens on `PORT` (default `3000`) and binds to `0.0.0.0`, as required b
 
 ## Render deployment
 
-Deploy using [`render.yaml`](./render.yaml). Set `APP_URL` to the public API origin and `OIDC_ISSUER` to that origin followed by `/api/oidc`. For the recommended Vercel same-origin setup, the browser-facing origin is the Vercel (or custom-domain) URL; Vercel rewrites `/api/*` to this Render service. See the [OIDC deployment guide](../sdk/js/oidc.md#13-deploying-on-render--vercel) for issuer and cookie configuration.
+Deploy using [`render.yaml`](./render.yaml). For the `node-accounts-backend.onrender.com` deployment, `APP_URL` and `OIDC_ISSUER` are set to that public origin and its `/api/oidc` issuer. If the public API hostname changes, update both values to match. For the recommended Vercel same-origin setup, use the browser-facing Vercel (or custom-domain) origin for both values; Vercel rewrites `/api/*` to this Render service. See the [OIDC deployment guide](../sdk/js/oidc.md#13-deploying-on-render--vercel) for issuer and cookie configuration.
 
 Render's filesystem is ephemeral, so use an external MySQL or PostgreSQL database for persistent storage; SQLite is intended for local use. Set `DB_CONNECTION` to `mysql`, `pgsql`, or `sqlite`. MySQL and PostgreSQL use `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, and `DB_PASSWORD`; enable `DB_SSL` for providers that require TLS and set `DB_SSL_CA` when a CA certificate is needed. SQLite uses `DB_SQLITE_PATH`.
 
