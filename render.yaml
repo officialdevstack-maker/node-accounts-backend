@@ -55,7 +55,7 @@ services:
         sync: false
       - key: MAIL_FROM_NAME
         sync: false
-      # - key: AVATAR_STORAGE_DRIVER
+      - key: AVATAR_STORAGE_DRIVER
         value: local
       - key: AVATAR_ALLOW_LOCAL_IN_PROD
         value: "true"
