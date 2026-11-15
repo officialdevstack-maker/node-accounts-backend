@@ -56,6 +56,11 @@ services:
       - key: MAIL_FROM_NAME
         sync: false
       # - key: AVATAR_STORAGE_DRIVER
+        value: local
+      - key: AVATAR_ALLOW_LOCAL_IN_PROD
+        value: "true"
+      # When you move to S3, delete the two entries above and uncomment:
+      # - key: AVATAR_STORAGE_DRIVER
       #   value: s3
       # - key: S3_ENDPOINT
       #   sync: false

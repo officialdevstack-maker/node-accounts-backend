@@ -3,12 +3,18 @@ import { env } from './env.js';
 
 const isProd = env.string('NODE_ENV') === 'production';
 const driver = env.oneOf('AVATAR_STORAGE_DRIVER', ['local', 's3'] as const, isProd ? 's3' : 'local');
+const allowLocalInProd = env.bool('AVATAR_ALLOW_LOCAL_IN_PROD', false);
 const bucket = env.string('S3_BUCKET');
 const accessKeyId = env.string('S3_ACCESS_KEY_ID');
 const secretAccessKey = env.string('S3_SECRET_ACCESS_KEY');
 
 if (isProd && driver !== 's3') {
-  throw new Error('AVATAR_STORAGE_DRIVER must be "s3" in production.');
+  if (!allowLocalInProd) {
+    throw new Error(
+      'AVATAR_STORAGE_DRIVER must be "s3" in production (or set AVATAR_ALLOW_LOCAL_IN_PROD=true to accept losing avatars on every redeploy).',
+    );
+  }
+  console.warn('[storage] Using LOCAL avatar storage in production. Uploaded avatars will be lost on every deploy or restart.');
 }
 if (driver === 's3' && (!bucket || !accessKeyId || !secretAccessKey)) {
   throw new Error('S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required for S3 avatar storage.');
