@@ -41,6 +41,10 @@ services:
         sync: false
       - key: INTERNAL_SHARED_SECRET
         sync: false
+      - key: NOTIFICATIONS_SERVICE_URL
+        sync: false
+      - key: NOTIFICATIONS_SERVICE_API_KEY
+        sync: false
       - key: MAIL_HOST
         sync: false
       - key: MAIL_PORT

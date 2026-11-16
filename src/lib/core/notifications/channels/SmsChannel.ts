@@ -1,5 +1,6 @@
 // notifications/channels/SmsChannel.ts
 // Provider-agnostic SMS channel. Plug your provider in with SmsChannel.useDriver(...).
+import { sendNotification } from '../client.js';
 import { routeFor } from '../Notifiable.js';
 import type { Notification } from '../Notification.js';
 import type { Channel, Notifiable } from '../types.js';
@@ -16,9 +17,9 @@ export class LogSmsDriver implements SmsDriver {
 }
 
 export class SmsChannel implements Channel {
-  private static driver: SmsDriver = new LogSmsDriver();
+  private static driver: SmsDriver | undefined;
 
-  /** e.g. SmsChannel.useDriver({ send: async (to, msg) => { await termii.send(to, msg) } }) */
+  /** Override delivery locally; by default admin-2 sends the SMS. */
   static useDriver(driver: SmsDriver): void {
     this.driver = driver;
   }
@@ -31,6 +32,19 @@ export class SmsChannel implements Channel {
     const phone = routeFor(notifiable, 'sms');
     if (!phone) return;
 
-    await SmsChannel.driver.send(phone, notification.toSms(notifiable));
+    const message = notification.toSms(notifiable);
+    if (SmsChannel.driver) {
+      await SmsChannel.driver.send(phone, message);
+      return;
+    }
+
+    await sendNotification({
+      id: notification.id,
+      notifiableId: String(notifiable.id),
+      type: notification.type,
+      queue: false,
+      delayMs: 0,
+      channels: { sms: { to: phone, message } },
+    });
   }
 }

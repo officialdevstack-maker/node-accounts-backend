@@ -1,28 +1,16 @@
 // notifications/NotificationManager.ts
-// Resolves channels and dispatches notifications (like Laravel's ChannelManager).
+// Forwards notifications to the shared admin-2 notification service.
 import { MailQueue } from '../mail/MailQueue.js';
-import { DatabaseChannel } from './channels/DatabaseChannel.js';
-import { MailChannel } from './channels/MailChannel.js';
-import { SmsChannel } from './channels/SmsChannel.js';
+import { routeFor } from './Notifiable.js';
 import type { Notification } from './Notification.js';
+import { mailPayload, sendNotification } from './client.js';
 import type { Channel, ChannelName, Notifiable } from './types.js';
 
 export class NotificationManager {
-  private static channels = new Map<ChannelName, Channel>([
-    ['mail', new MailChannel()],
-    ['database', new DatabaseChannel()],
-    ['sms', new SmsChannel()],
-  ]);
+  private static extensions = new Map<ChannelName, Channel>();
 
-  /** Register a custom channel, e.g. NotificationManager.extend('push', new PushChannel()) */
   static extend(name: ChannelName, channel: Channel): void {
-    this.channels.set(name, channel);
-  }
-
-  private static channel(name: ChannelName): Channel {
-    const channel = this.channels.get(name);
-    if (!channel) throw new Error(`Notification channel [${name}] is not registered.`);
-    return channel;
+    this.extensions.set(name, channel);
   }
 
   /** Send respecting notification.shouldQueue. */
@@ -30,30 +18,82 @@ export class NotificationManager {
     const list = Array.isArray(notifiables) ? notifiables : [notifiables];
 
     for (const notifiable of list) {
-      if (notification.shouldQueue) {
-        this.queueFor(notifiable, notification);
-      } else {
-        await this.sendNow(notifiable, notification);
-      }
+      await this.dispatch(notifiable, notification, notification.shouldQueue);
     }
   }
 
   /** Send immediately, waits for every channel. */
   static async sendNow(notifiable: Notifiable, notification: Notification): Promise<void> {
-    const results = await Promise.allSettled(
-      notification.via(notifiable).map((name) => this.channel(name).send(notifiable, notification)),
-    );
-
-    const errors = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected').map((r) => r.reason);
-    if (errors.length) {
-      throw new AggregateError(errors, `${notification.type} failed on ${errors.length} channel(s).`);
-    }
+    await this.dispatch(notifiable, notification, false);
   }
 
-  /** One job per channel, so a retry never re-sends a channel that already succeeded. */
-  private static queueFor(notifiable: Notifiable, notification: Notification): void {
-    for (const name of notification.via(notifiable)) {
-      MailQueue.push(() => this.channel(name).send(notifiable, notification), notification.delayMs);
+  private static async dispatch(
+    notifiable: Notifiable,
+    notification: Notification,
+    queue: boolean,
+  ): Promise<void> {
+    const channels = new Set(notification.via(notifiable));
+    const payload: {
+      database?: { data: Record<string, unknown> };
+      mail?: { to: string; subject: string; text?: string; html?: string };
+      sms?: { to: string; message: string };
+    } = {};
+    const localDeliveries: Promise<void>[] = [];
+
+    if (channels.has('database') && notifiable.id !== 'anonymous') {
+      if (!notification.toDatabase) {
+        throw new Error(`${notification.type} uses the "database" channel but has no toDatabase() method.`);
+      }
+      payload.database = { data: notification.toDatabase(notifiable) };
+    }
+
+    if (channels.has('mail')) {
+      const address = routeFor(notifiable, 'mail');
+      if (address) {
+        payload.mail = await mailPayload(notification, notifiable, address);
+      }
+    }
+
+    if (channels.has('sms')) {
+      if (!notification.toSms) {
+        throw new Error(`${notification.type} uses the "sms" channel but has no toSms() method.`);
+      }
+      const phone = routeFor(notifiable, 'sms');
+      if (phone) payload.sms = { to: phone, message: notification.toSms(notifiable) };
+    }
+
+    for (const channel of channels) {
+      if (!['database', 'mail', 'sms'].includes(channel)) {
+        const extension = this.extensions.get(channel);
+        if (!extension) throw new Error(`Notification channel [${channel}] is not registered.`);
+        if (queue) {
+          MailQueue.push(() => extension.send(notifiable, notification), notification.delayMs);
+        } else {
+          localDeliveries.push(extension.send(notifiable, notification));
+        }
+      }
+    }
+
+    const deliveries = [...localDeliveries];
+    if (payload.database || payload.mail || payload.sms) {
+      deliveries.push(
+        sendNotification({
+          id: notification.id,
+          notifiableId: String(notifiable.id),
+          type: notification.type,
+          queue,
+          delayMs: queue ? notification.delayMs : 0,
+          channels: payload,
+        }),
+      );
+    }
+
+    const results = await Promise.allSettled(deliveries);
+    const errors = results
+      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+      .map((result) => result.reason);
+    if (errors.length) {
+      throw new AggregateError(errors, `${notification.type} failed on ${errors.length} channel(s).`);
     }
   }
 }

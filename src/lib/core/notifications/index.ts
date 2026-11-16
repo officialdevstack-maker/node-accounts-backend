@@ -8,6 +8,7 @@ export { MailChannel } from './channels/MailChannel.js';
 export { DatabaseChannel } from './channels/DatabaseChannel.js';
 export { SmsChannel, LogSmsDriver, type SmsDriver } from './channels/SmsChannel.js';
 export { DatabaseNotification } from './models/DatabaseNotification.js';
+export * from './client.js';
 export * from './types.js';
 
 export { WelcomeNotification } from './messages/WelcomeNotification.js';

@@ -4,6 +4,7 @@ import { notifyBackchannelLogoutAfterResponse } from '../lib/oidc/response-logou
 import { AccessToken } from '../models/AccessToken.js';
 import { Activity, type ActivityEvent } from '../models/Activity.js';
 import { OAuthCode } from '../models/OAuthCode.js';
+import { OAuthGrant } from '../models/OAuthGrant.js';
 import { OAuthRefreshToken } from '../models/OAuthRefreshToken.js';
 import { User } from '../models/User.js';
 import { Mail, WelcomeMail } from '../lib/core/mail/index.js';
@@ -30,11 +31,17 @@ class AdminUserController extends Controller {
 
   async show(req: HttpRequest) {
     const user = await this.target(req);
-    const [devices, activity] = await Promise.all([
+    const [devices, activity, connectedApps] = await Promise.all([
       AccessToken.forUser(user.id),
       Activity.forUser(user.id, 1, 20),
+      OAuthGrant.forUserWithClients(user.id),
     ]);
-    return this.ok({ user, devices: devices.map((d) => d.toDevice(null)), activity: activity.data });
+    return this.ok({
+      user,
+      devices: devices.map((d) => d.toDevice(null)),
+      activity: activity.data,
+      connectedApps,
+    });
   }
 
   async store(req: AdminCreateUserRequest) {

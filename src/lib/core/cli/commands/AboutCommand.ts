@@ -24,7 +24,7 @@ export class AboutCommand extends Command {
       ['Database', `${config('database.default')} @ ${config('database.host')}:${config('database.port')}/${config('database.name')}`],
       ['Mail', `${config('mail.default')} (${config('mail.mailers.smtp.host')}:${config('mail.mailers.smtp.port')})`],
       ['Queue', config('queue.driver')],
-      ['SMS', config('notifications.sms.driver')],
+      ['Notifications', config('notifications.serviceUrl') ? 'admin-2 configured' : 'NOT CONFIGURED'],
     ]);
     this.newLine();
   }

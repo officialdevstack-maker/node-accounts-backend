@@ -1,10 +1,15 @@
 <!-- notifications/README.md -->
 # Notification pack (Laravel-style)
 
-Needs the `mail/` pack (mail channel). The database channel uses the query builder and the `notifications` migration.
+Built-in email, SMS, and inbox delivery is handled by the shared `admin-2` notification API.
+Configure `NOTIFICATIONS_SERVICE_URL` and `NOTIFICATIONS_SERVICE_API_KEY` in the Accounts backend;
+create a separate API key for Accounts in admin-2 and keep it server-side. Apply admin-2 migrations
+with `npm run db:migrate`. Queued email and SMS use admin-2's Postgres outbox and need its
+`GET /api/cron/notifications` worker scheduled at least once per minute.
 
 ## 1. Boot
-Run `artisan migrate` to create the notifications table.
+The old Accounts notifications table is retained for existing installations, but new inbox entries
+are stored centrally in admin-2.
 
 ## 2. Send
 ```ts
@@ -17,6 +22,9 @@ await Notify.send(users, new WelcomeNotification('Team'));               // many
 await Notify.route('mail', 'a@b.com').notify(new OtpNotification('1234')); // on-demand
 ```
 `user` needs `id`, and `email` / `phone` for those channels (or a `routeNotificationFor(channel)` method).
+Email content is rendered by the Accounts mailables, then sent using the SMTP settings saved in admin-2.
+Simple `replyTo` and priority settings are preserved; attachments and multiple recipients are rejected
+because the shared API accepts one recipient per notification.
 
 ## 3. In-app inbox (database channel)
 ```ts
@@ -28,5 +36,5 @@ await DatabaseNotification.markAllAsRead(user.id);
 
 ## 4. Extend
 - New notification: copy a file in `messages/`, extend `Notification`, implement `via()` + the `toX()` methods.
-- Real SMS provider: `SmsChannel.useDriver({ send: async (to, message) => { /* call Termii, Twilio, etc. */ } })`.
-- New channel (push, Slack...): `NotificationManager.extend('push', new PushChannel())`, then return `'push'` from `via()` and add `toPush()` to your notification.
+- Configure real SMS delivery in admin-2 with `SMS_DRIVER=termii` and its Termii credentials. The log driver does not send SMS.
+- Custom channels registered with `NotificationManager.extend()` still run in Accounts; built-in channels use the central service.

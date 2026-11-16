@@ -12,16 +12,23 @@ import type { DeleteAccountRequest } from '../requests/DeleteAccountRequest.js';
 import { removeFile } from './AvatarController.js';
 import { AUTH_COOKIE_NAME, authCookieOptions } from '../lib/auth/cookie.js';
 import { notifyBackchannelLogoutAfterResponse } from '../lib/oidc/response-logout.js';
+import { config } from '../lib/core/config/index.js';
+import { DatabaseNotification } from '../lib/core/notifications/index.js';
 
 class PrivacyController extends Controller {
   async export(req: HttpRequest) {
     const user = this.user<User>(req);
     const currentId = req.auth.currentTokenId();
 
-    const [preferences, tokens, activity] = await Promise.all([
+    const notificationsPromise =
+      config('notifications.serviceUrl') || config('notifications.serviceApiKey')
+        ? DatabaseNotification.forNotifiable(user.id)
+        : Promise.resolve([]);
+    const [preferences, tokens, activity, notifications] = await Promise.all([
       UserPreference.for(user.id),
       AccessToken.forUser(user.id),
       Activity.exportFor(user.id),
+      notificationsPromise,
     ]);
 
     await Activity.record(user.id, 'data_exported', { ip: req.ip(), userAgent: req.userAgent() });
@@ -31,6 +38,7 @@ class PrivacyController extends Controller {
       profile: user.toObject(),
       preferences,
       devices: tokens.map((token) => token.toDevice(currentId)),
+      notifications,
       activity,
     }).header('Content-Disposition', 'attachment; filename="spurs-account-data.json"');
   }
@@ -45,6 +53,10 @@ class PrivacyController extends Controller {
     }
 
     const avatar = user.avatar;
+
+    if (config('notifications.serviceUrl') || config('notifications.serviceApiKey')) {
+      await DatabaseNotification.deleteForNotifiable(user.id);
+    }
 
     await DB.transaction(async () => {
       await Promise.all([
