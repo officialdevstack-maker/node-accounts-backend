@@ -6,6 +6,7 @@ import { Activity, type ActivityEvent } from '../models/Activity.js';
 import { OAuthCode } from '../models/OAuthCode.js';
 import { OAuthGrant } from '../models/OAuthGrant.js';
 import { OAuthRefreshToken } from '../models/OAuthRefreshToken.js';
+import { KycProfile } from '../models/KycProfile.js';
 import { User } from '../models/User.js';
 import { Mail, WelcomeMail } from '../lib/core/mail/index.js';
 import type { AdminCreateUserRequest } from '../requests/AdminCreateUserRequest.js';
@@ -31,16 +32,36 @@ class AdminUserController extends Controller {
 
   async show(req: HttpRequest) {
     const user = await this.target(req);
-    const [devices, activity, connectedApps] = await Promise.all([
+    const [devices, activity, connectedApps, recentLogins, kyc] = await Promise.all([
       AccessToken.forUser(user.id),
       Activity.forUser(user.id, 1, 20),
       OAuthGrant.forUserWithClients(user.id),
+      Activity.recentLoginsForUser(user.id),
+      KycProfile.where('user_id', user.id).first(),
     ]);
+    const duplicateCount = kyc
+      ? await KycProfile.where('bvn_hash', kyc.bvnHash).where('user_id', '!=', user.id).count()
+      : 0;
     return this.ok({
       user,
+      kyc: kyc
+        ? {
+            status: kyc.status,
+            bvnMasked: kyc.bvnMasked,
+            fullName: kyc.fullName,
+            dateOfBirth: kyc.dateOfBirth.toISOString().slice(0, 10),
+            phone: kyc.phone,
+            rejectionReason: kyc.rejectionReason,
+            submittedAt: kyc.submittedAt.toISOString(),
+            reviewedAt: kyc.reviewedAt?.toISOString() ?? null,
+            reviewedBy: kyc.reviewedBy,
+            duplicateCount,
+          }
+        : null,
       devices: devices.map((d) => d.toDevice(null)),
       activity: activity.data,
       connectedApps,
+      recentLogins,
     });
   }
 
@@ -122,6 +143,38 @@ class AdminUserController extends Controller {
       await this.audit(req, admin, user, 'user_verified_by_admin');
     }
     return this.ok(user, 'Email marked as verified.');
+  }
+
+  async reviewKyc(req: HttpRequest) {
+    const admin = this.actor(req);
+    const user = await this.target(req);
+    const profile = await KycProfile.where('user_id', user.id).first();
+    if (!profile) this.abort(404, 'This user has not submitted a BVN.');
+    if (profile.status !== 'pending') this.abort(409, 'Only pending BVN submissions can be reviewed.');
+
+    const data = await this.validate<{ status: 'verified' | 'rejected'; reason?: string }>(req, {
+      status: ['required', 'in:verified,rejected'],
+      reason: ['sometimes', 'string', 'max:500'],
+    });
+    const reason = data.reason?.trim() ?? '';
+    if (data.status === 'rejected' && !reason) {
+      this.abort(422, 'Validation failed.', { reason: ['A reason is required when rejecting a BVN.'] });
+    }
+
+    await profile.update({
+      status: data.status,
+      rejectionReason: data.status === 'rejected' ? reason : null,
+      reviewedBy: admin.email,
+      reviewedAt: new Date(),
+    });
+    await Activity.record(
+      user.id,
+      data.status === 'verified' ? 'kyc_verified' : 'kyc_rejected',
+      { ip: req.ip(), userAgent: req.userAgent() },
+      { adminId: admin.id, adminEmail: admin.email },
+    );
+
+    return this.ok({ status: profile.status }, data.status === 'verified' ? 'BVN verified.' : 'BVN rejected.');
   }
 
   private async target(req: HttpRequest): Promise<User> {

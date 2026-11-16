@@ -13,6 +13,7 @@ import { connectedAppController } from "../controllers/ConnectedAppController.js
 import { deviceController } from "../controllers/DeviceController.js";
 import { forgotPasswordController } from "../controllers/ForgotPasswordController.js";
 import { internalUserController } from "../controllers/InternalUserController.js";
+import { kycController } from "../controllers/KycController.js";
 import { oidcController } from "../controllers/OidcController.js";
 import { preferenceController } from "../controllers/PreferenceController.js";
 import { privacyController } from "../controllers/PrivacyController.js";
@@ -44,6 +45,8 @@ Route.group({ prefix: "/auth", as: "auth." }, () => {
     Route.delete("/connected-apps/{id}", [connectedAppController, "destroy"]).whereNumber("id").name("connected-apps.destroy");
     Route.get("/activity", [activityController, "index"]).name("activity.index");
     Route.get("/profile", [authenticationController, "show"]).name("profile");
+    Route.get("/kyc", [kycController, "show"]).name("kyc.show");
+    Route.post("/kyc", [kycController, "store"]).middleware("throttle:5,1").name("kyc.store");
     Route.put("/avatar", [avatarController, "update"])
       .middleware(express.raw({ type: ["image/png", "image/jpeg", "image/webp"], limit: "1mb" }), "throttle:10,1")
       .name("avatar.update");
@@ -83,6 +86,11 @@ Route.group({ prefix: "/internal", as: "internal." }, () => {
     .whereNumber("id")
     .name("users.show");
 
+  Route.get("/users/{id}/bvn", [internalUserController, "bvn"])
+    .middleware("internal-key", "throttle:120,1")
+    .whereNumber("id")
+    .name("users.bvn");
+
   Route.middleware("internal-key", "throttle:120,1").group(() => {
     Route.get("/stats/users", [adminStatsController, "summary"]).name("stats.users");
     Route.get("/stats/active-users-chart", [adminStatsController, "activeChart"]).name("stats.chart");
@@ -90,6 +98,7 @@ Route.group({ prefix: "/internal", as: "internal." }, () => {
     Route.get("/admin/users", [adminUserController, "index"]).name("admin.users.index");
     Route.post("/admin/users", [adminUserController, "store"]).request(AdminCreateUserRequest).name("admin.users.store");
     Route.get("/admin/users/{id}", [adminUserController, "show"]).whereNumber("id").name("admin.users.show");
+    Route.post("/admin/users/{id}/kyc", [adminUserController, "reviewKyc"]).whereNumber("id").name("admin.users.kyc");
     Route.post("/admin/users/{id}/suspend", [adminUserController, "suspend"]).whereNumber("id").name("admin.users.suspend");
     Route.post("/admin/users/{id}/unsuspend", [adminUserController, "unsuspend"]).whereNumber("id").name("admin.users.unsuspend");
     Route.post("/admin/users/{id}/revoke-sessions", [adminUserController, "revokeSessions"]).whereNumber("id").name("admin.users.revoke-sessions");

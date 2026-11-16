@@ -16,6 +16,9 @@ export type ActivityEvent =
   | 'avatar_updated'
   | 'avatar_removed'
   | 'data_exported'
+  | 'kyc_submitted'
+  | 'kyc_verified'
+  | 'kyc_rejected'
   | 'app_connected'
   | 'app_revoked'
   | 'user_suspended'
@@ -82,6 +85,16 @@ export const Activity = {
       .orderByDesc('id')
       .paginate(perPage, page);
     return { ...result, data: result.data.map(hydrate) };
+  },
+
+  async recentLoginsForUser(userId: number, limit = 20) {
+    const rows = await DB.table(TABLE)
+      .where('user_id', userId)
+      .where('event', 'login')
+      .orderByDesc('id')
+      .limit(limit)
+      .get();
+    return rows.map(hydrate);
   },
 
   async exportFor(userId: number, limit = 1000) {
