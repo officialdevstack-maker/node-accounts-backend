@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
 import { config } from './core/config/index.js';
 
 function encryptionKey(): Buffer {
@@ -10,7 +10,7 @@ function encryptionKey(): Buffer {
 export function hashBvn(bvn: string): string {
   const appKey = config('app.key');
   if (!appKey) throw new Error('APP_KEY must be configured to store BVNs securely.');
-  return createHash('sha256').update(`${appKey}:bvn:${bvn}`).digest('hex');
+  return createHmac('sha256', appKey).update(`bvn:${bvn}`).digest('hex');
 }
 
 export function maskBvn(bvn: string): string {

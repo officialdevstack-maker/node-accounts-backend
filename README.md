@@ -8,9 +8,11 @@ Deploy using [`render.yaml`](./render.yaml). For the `node-accounts-backend.onre
 
 Render's filesystem is ephemeral, so use an external MySQL or PostgreSQL database for persistent storage; SQLite is intended for local use. Set `DB_CONNECTION` to `mysql`, `pgsql`, or `sqlite`. MySQL and PostgreSQL use `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, and `DB_PASSWORD`; enable `DB_SSL` for providers that require TLS and set `DB_SSL_CA` when a CA certificate is needed. SQLite uses `DB_SQLITE_PATH`.
 
-Production also requires `APP_KEY` or `JWT_SECRET`, `OIDC_PRIVATE_KEY`, `FRONTEND_URL`, and a non-empty `CORS_ORIGINS` list without `*`. Configure S3-compatible avatar storage with `AVATAR_STORAGE_DRIVER=s3` and the `S3_*` values. Local avatar storage can be explicitly enabled in production with `AVATAR_STORAGE_DRIVER=local` and `AVATAR_ALLOW_LOCAL_IN_PROD=true`, but uploaded avatars are lost on redeploy or restart. Set `REDIS_URL` to enable durable mail jobs and shared rate-limit storage.
+Production also requires `APP_KEY` or `JWT_SECRET`, `OIDC_PRIVATE_KEY`, `FRONTEND_URL`, and a non-empty `CORS_ORIGINS` list without `*`. BVN data encryption specifically requires a stable `APP_KEY`; set one even when `JWT_SECRET` is configured, and keep it unchanged after users submit BVNs. Configure S3-compatible avatar storage with `AVATAR_STORAGE_DRIVER=s3` and the `S3_*` values. Local avatar storage can be explicitly enabled in production with `AVATAR_STORAGE_DRIVER=local` and `AVATAR_ALLOW_LOCAL_IN_PROD=true`, but uploaded avatars are lost on redeploy or restart. Set `REDIS_URL` to enable durable mail jobs and shared rate-limit storage.
 
 Admin-site routes under `/api/internal/admin/*` and `/api/internal/stats/*` require the `x-internal-secret` header; they do not use a user session or service token. Call them only from the admin site's server over HTTPS, and never expose the shared key to a browser. Configure a long, random `INTERNAL_SHARED_SECRET` and restrict access at the proxy or network boundary as well. The separate `/api/internal/users/{id}` endpoint continues to use the internal-network and `users:read` service-token checks.
+
+The private `/api/internal/users/{id}/bvn` endpoint returns identity details only after an administrator approves a user's BVN. Spurs Pay should call it server-to-server using the same `INTERNAL_SHARED_SECRET`; never send this credential to the browser.
 
 The admin settings page reads and updates the whitelisted settings through
 `/api/internal/admin/settings`. Apply the pending backend migration before using it:

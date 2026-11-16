@@ -45,8 +45,8 @@ class KycController extends Controller {
     }
 
     const fullName = data.full_name.trim().replace(/\s+/g, ' ');
-    if (fullName.length < 2) {
-      this.abort(422, 'Validation failed.', { full_name: ['Enter your full name as registered with your BVN.'] });
+    if (fullName.split(' ').filter(Boolean).length < 2) {
+      this.abort(422, 'Validation failed.', { full_name: ['Enter your first and last names as registered with your BVN.'] });
     }
 
     const dateOfBirth = data.date_of_birth.trim();

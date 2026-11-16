@@ -19,6 +19,8 @@ services:
         sync: false
       - key: OIDC_PRIVATE_KEY
         sync: false
+      - key: APP_KEY
+        sync: false
       - key: JWT_SECRET
         sync: false
       - key: DB_HOST
