@@ -21,5 +21,5 @@ export const oidcConfig = {
   serviceTtl: env.number('OIDC_SERVICE_TTL', 900),
 
   scopes: ['openid', 'profile', 'email', 'phone', 'offline_access'] as string[],
-  serviceScopes: ['users:read', 'users:introspect'] as string[],
+  serviceScopes: ['users:read', 'users:introspect', 'pay:checkout'] as string[],
 };

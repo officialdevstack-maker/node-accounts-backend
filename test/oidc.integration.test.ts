@@ -23,6 +23,7 @@ process.env.AUTH_COOKIE_DOMAIN = ''
 process.env.BCRYPT_ROUNDS = '4'
 process.env.RATE_LIMIT_STORE = 'memory'
 process.env.RATE_LIMIT_ENABLED = 'false'
+process.env.INTERNAL_SHARED_SECRET = 'test-internal-secret'
 process.env.QUEUE_DRIVER = 'memory'
 process.env.AVATAR_STORAGE_DRIVER = 'local'
 
@@ -37,6 +38,7 @@ const { pkceChallenge, sha256 } = await import('../src/lib/oidc/util.js')
 const redirectUri = 'https://client.example.test/callback'
 const email = `oidc-${randomUUID()}@example.test`
 const clientIds: string[] = []
+let adminCreatedClientId = ''
 let api: Express
 let userId = 0
 let sessionCookie = ''
@@ -170,6 +172,85 @@ describe('OIDC integration', { concurrency: false }, () => {
     assert.equal(typeof tokens['access_token'], 'string')
     assert.equal(typeof tokens['id_token'], 'string')
     assert.equal(typeof tokens['refresh_token'], 'string')
+  })
+
+  it('registers confidential OIDC clients through the audited internal admin endpoint', async () => {
+    const response = await request(api)
+      .post('/api/internal/admin/oidc-clients')
+      .set('x-internal-secret', 'test-internal-secret')
+      .set('x-admin-audit-reason', 'Register integration test app')
+      .set('x-admin-request-id', randomUUID())
+      .send({
+        name: 'Admin-created app',
+        redirectUris: [redirectUri],
+        scopes: ['openid', 'email'],
+        firstParty: false,
+        public: false,
+        clientCredentials: false,
+        service: false,
+      })
+
+    assert.equal(response.status, 201)
+    assert.equal(response.body.data.name, 'Admin-created app')
+    assert.equal(response.body.data.scopes.join(' '), 'openid email')
+    assert.equal(typeof response.body.data.clientId, 'string')
+    assert.equal(typeof response.body.data.clientSecret, 'string')
+    adminCreatedClientId = response.body.data.clientId
+    clientIds.push(adminCreatedClientId)
+
+    const stored = await DB.table('oauth_clients')
+      .where('client_id', adminCreatedClientId)
+      .first()
+    assert.ok(stored)
+    assert.notEqual(stored.secret_hash, response.body.data.clientSecret)
+  })
+
+  it('rejects invalid client-credentials scopes without creating a client', async () => {
+    const response = await request(api)
+      .post('/api/internal/admin/oidc-clients')
+      .set('x-internal-secret', 'test-internal-secret')
+      .set('x-admin-audit-reason', 'Reject invalid integration test app')
+      .set('x-admin-request-id', randomUUID())
+      .send({
+        name: 'Invalid service app',
+        scopes: ['openid'],
+        clientCredentials: true,
+      })
+
+    assert.equal(response.status, 422)
+  })
+
+  it('lists, reads, updates and deactivates OIDC clients without exposing secrets', async () => {
+    const headers = { 'x-internal-secret': 'test-internal-secret' }
+    const list = await request(api).get('/api/internal/admin/oidc-clients').set(headers)
+    assert.equal(list.status, 200)
+    assert.ok(list.body.data.some((client: { clientId: string }) => client.clientId === adminCreatedClientId))
+    assert.equal(JSON.stringify(list.body).includes('secretHash'), false)
+
+    const detail = await request(api)
+      .get(`/api/internal/admin/oidc-clients/${adminCreatedClientId}`)
+      .set(headers)
+    assert.equal(detail.status, 200)
+    assert.equal(detail.body.data.clientId, adminCreatedClientId)
+
+    const updated = await request(api)
+      .patch(`/api/internal/admin/oidc-clients/${adminCreatedClientId}`)
+      .set(headers)
+      .set('x-admin-audit-reason', 'Update integration test app')
+      .set('x-admin-request-id', randomUUID())
+      .send({ name: 'Updated admin-created app', scopes: ['openid', 'profile'], firstParty: true })
+    assert.equal(updated.status, 200)
+    assert.equal(updated.body.data.client.name, 'Updated admin-created app')
+    assert.equal(updated.body.data.client.type, 'first_party')
+
+    const deleted = await request(api)
+      .delete(`/api/internal/admin/oidc-clients/${adminCreatedClientId}`)
+      .set(headers)
+      .set('x-admin-audit-reason', 'Deactivate integration test app')
+      .set('x-admin-request-id', randomUUID())
+      .send({})
+    assert.equal(deleted.status, 200)
+    assert.equal(deleted.body.data.client.isActive, false)
   })
 
   it('revokes refresh tokens when an authorization code is replayed', async () => {

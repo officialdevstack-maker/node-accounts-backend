@@ -8,7 +8,7 @@ export class OAuthClient extends Model {
   static fillable = [
     'clientId', 'secretHash', 'name', 'description', 'logoUri', 'type',
     'redirectUris', 'postLogoutRedirectUris', 'allowedScopes', 'backchannelLogoutUri',
-    'clientCredentialsEnabled', 'isActive',
+    'clientCredentialsEnabled', 'isActive', 'lastUsedAt',
   ];
   static hidden = ['secretHash'];
   static casts: Record<string, Cast> = {
@@ -18,6 +18,7 @@ export class OAuthClient extends Model {
     allowedScopes: 'json',
     clientCredentialsEnabled: 'boolean',
     isActive: 'boolean',
+    lastUsedAt: 'date',
     createdAt: 'date',
     updatedAt: 'date',
   };
@@ -35,6 +36,7 @@ export class OAuthClient extends Model {
   declare backchannelLogoutUri: string | null;
   declare clientCredentialsEnabled: boolean;
   declare isActive: boolean;
+  declare lastUsedAt: Date | null;
   declare createdAt: Date;
   declare updatedAt: Date;
 

@@ -6,6 +6,8 @@ import { adminActivityController } from "../controllers/AdminActivityController.
 import { adminStatsController } from "../controllers/AdminStatsController.js";
 import { adminSettingController } from "../controllers/AdminSettingController.js";
 import { adminUserController } from "../controllers/AdminUserController.js";
+import { internalPayMerchantClientController } from "../controllers/InternalPayMerchantClientController.js";
+import { internalOidcClientController } from "../controllers/InternalOidcClientController.js";
 import { activityController } from "../controllers/ActivityController.js";
 import { avatarController } from "../controllers/AvatarController.js";
 import { changePasswordController } from "../controllers/ChangePasswordController.js";
@@ -92,8 +94,27 @@ Route.group({ prefix: "/internal", as: "internal." }, () => {
     .name("users.bvn");
 
   Route.middleware("internal-key", "throttle:120,1").group(() => {
+    Route.get("/admin/oidc-clients", [internalOidcClientController, "index"])
+      .name("admin.oidc-clients.index");
+    Route.post("/admin/oidc-clients", [internalOidcClientController, "store"])
+      .name("admin.oidc-clients.store");
+    Route.get("/admin/oidc-clients/{clientId}", [internalOidcClientController, "show"])
+      .name("admin.oidc-clients.show");
+    Route.patch("/admin/oidc-clients/{clientId}", [internalOidcClientController, "update"])
+      .name("admin.oidc-clients.update");
+    Route.delete("/admin/oidc-clients/{clientId}", [internalOidcClientController, "destroy"])
+      .name("admin.oidc-clients.destroy");
     Route.get("/stats/users", [adminStatsController, "summary"]).name("stats.users");
     Route.get("/stats/active-users-chart", [adminStatsController, "activeChart"]).name("stats.chart");
+
+    Route.post("/admin/pay-merchants/{merchantId}/oauth-client", [internalPayMerchantClientController, "store"])
+      .name("admin.pay-merchants.oauth-client.store");
+    Route.get("/admin/pay-merchants/{merchantId}/oauth-client", [internalPayMerchantClientController, "show"])
+      .name("admin.pay-merchants.oauth-client.show");
+    Route.post("/admin/pay-merchants/{merchantId}/oauth-client/rotate", [internalPayMerchantClientController, "rotate"])
+      .name("admin.pay-merchants.oauth-client.rotate");
+    Route.post("/admin/pay-merchants/{merchantId}/oauth-client/revoke", [internalPayMerchantClientController, "revoke"])
+      .name("admin.pay-merchants.oauth-client.revoke");
 
     Route.get("/admin/users", [adminUserController, "index"]).name("admin.users.index");
     Route.post("/admin/users", [adminUserController, "store"]).request(AdminCreateUserRequest).name("admin.users.store");

@@ -120,8 +120,11 @@ class OidcController extends Controller {
           return Reply.json(await exchangeCode(client, req.body)).headers(NO_STORE);
         case 'refresh_token':
           return Reply.json(await refreshTokens(client, req.body)).headers(NO_STORE);
-        case 'client_credentials':
-          return Reply.json(clientCredentialsToken(client, req.body)).headers(NO_STORE);
+        case 'client_credentials': {
+          const token = clientCredentialsToken(client, req.body);
+          await client.update({ lastUsedAt: new Date() });
+          return Reply.json(token).headers(NO_STORE);
+        }
         default:
           throw new OidcError('unsupported_grant_type', 'Use authorization_code, refresh_token, or client_credentials.');
       }

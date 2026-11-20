@@ -7,6 +7,7 @@ import { Activity } from '../models/Activity.js';
 import { OAuthCode } from '../models/OAuthCode.js';
 import { OAuthRefreshToken } from '../models/OAuthRefreshToken.js';
 import { User } from '../models/User.js';
+import { KycProfile } from '../models/KycProfile.js';
 import { UserPreference } from '../models/UserPreference.js';
 import type { DeleteAccountRequest } from '../requests/DeleteAccountRequest.js';
 import { removeFile } from './AvatarController.js';
@@ -24,11 +25,12 @@ class PrivacyController extends Controller {
       config('notifications.serviceUrl') || config('notifications.serviceApiKey')
         ? DatabaseNotification.forNotifiable(user.id)
         : Promise.resolve([]);
-    const [preferences, tokens, activity, notifications] = await Promise.all([
+    const [preferences, tokens, activity, notifications, kyc] = await Promise.all([
       UserPreference.for(user.id),
       AccessToken.forUser(user.id),
       Activity.exportFor(user.id),
       notificationsPromise,
+      KycProfile.where('user_id', user.id).first(),
     ]);
 
     await Activity.record(user.id, 'data_exported', { ip: req.ip(), userAgent: req.userAgent() });
@@ -36,6 +38,19 @@ class PrivacyController extends Controller {
     return Reply.json({
       exportedAt: new Date().toISOString(),
       profile: user.toObject(),
+      identityVerification: kyc
+        ? {
+            status: kyc.status,
+            bvnMasked: kyc.bvnMasked,
+            fullName: kyc.fullName,
+            dateOfBirth: kyc.dateOfBirth.toISOString().slice(0, 10),
+            phone: kyc.phone,
+            rejectionReason: kyc.rejectionReason,
+            submittedAt: kyc.submittedAt.toISOString(),
+            reviewedAt: kyc.reviewedAt?.toISOString() ?? null,
+            reviewedBy: kyc.reviewedBy,
+          }
+        : null,
       preferences,
       devices: tokens.map((token) => token.toDevice(currentId)),
       notifications,
